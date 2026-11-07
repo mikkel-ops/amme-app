@@ -1,0 +1,78 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Installér Amning</title>
+  <meta name="theme-color" content="#f4cd5f">
+  <link rel="icon" href="icon-180.png">
+  <style>
+    :root { --yellow:#f4cd5f; --yellow-soft:#fcefcb; --ink:#2c3e63; --muted:#6b7487; --line:#e6e6e6; --red:#e5384a;
+            --serif: ui-serif, "New York", Georgia, serif; --sans: -apple-system, system-ui, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin:0; background:#fff; color:var(--ink); font:17px/1.5 var(--sans); }
+    header { background:var(--yellow); padding:calc(env(safe-area-inset-top) + 18px) 20px 18px; text-align:center; }
+    header h1 { margin:0; font:500 30px var(--serif); }
+    header p { margin:4px 0 0; font-size:15px; }
+    main { max-width:520px; margin:0 auto; padding:8px 16px calc(env(safe-area-inset-bottom) + 32px); }
+    .intro { background:var(--yellow-soft); border-radius:12px; padding:14px 16px; margin:16px 0 8px; font-size:15px; }
+    .step { margin:28px 0; }
+    .step h2 { display:flex; gap:12px; align-items:center; margin:0 0 6px; font:500 22px var(--serif); }
+    .num { flex:none; width:32px; height:32px; border-radius:50%; background:var(--ink); color:#fff;
+           font:700 16px/32px var(--sans); text-align:center; }
+    .step p { margin:0 0 12px; }
+    .en { color:var(--muted); font-size:14px; }
+    .step img { display:block; width:100%; max-width:340px; margin:0 auto; border-radius:18px;
+                border:1px solid var(--line); box-shadow:0 4px 18px rgba(0,0,0,.08); }
+    b.tap { color:var(--red); }
+    .done { text-align:center; border-top:1px solid var(--line); padding-top:20px; }
+    .btn { display:inline-block; margin-top:8px; padding:12px 26px; border-radius:999px; background:var(--ink);
+           color:#fff; text-decoration:none; font-weight:600; }
+    .note { color:var(--muted); font-size:14px; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Installér Amning</h1>
+    <p>Sådan lægger du appen på din iPhones hjemmeskærm</p>
+  </header>
+  <main>
+    <div class="intro">
+      Åbn <b>mikkel-ops.github.io/amme-app</b> i <b>Safari</b>, og følg de 4 trin herunder.
+      Det tager under et minut. Dine data bliver kun gemt på din egen telefon.
+    </div>
+
+    <section class="step">
+      <h2><span class="num">1</span> Åbn menuen</h2>
+      <p>Tryk på <b class="tap">≡-ikonet</b> nederst til venstre i adresselinjen.</p>
+      <img src="img/guide-1.png" alt="Safari med pil, der peger på menu-ikonet i adresselinjen">
+    </section>
+
+    <section class="step">
+      <h2><span class="num">2</span> Tryk på Del</h2>
+      <p>Vælg <b class="tap">Del</b> øverst i menuen. <span class="en">(På engelsk: “Share”)</span></p>
+      <img src="img/guide-2.png" alt="Menuen med pil, der peger på Del">
+    </section>
+
+    <section class="step">
+      <h2><span class="num">3</span> Føj til hjemmeskærm</h2>
+      <p>Tryk på <b class="tap">Føj til hjemmeskærm</b>. <span class="en">(På engelsk: “Add to Home Screen”)</span><br>
+        <span class="note">Kan du ikke se den? Rul ned eller tryk på “Vis flere”.</span></p>
+      <img src="img/guide-3.png" alt="Delingsmenuen med pil, der peger på Føj til hjemmeskærm">
+    </section>
+
+    <section class="step">
+      <h2><span class="num">4</span> Tryk Tilføj</h2>
+      <p>Sørg for, at <b>“Åbn som webapp”</b> er slået til, og tryk <b class="tap">Tilføj</b> øverst til højre.
+        <span class="en">(“Open as Web App” → “Add”)</span></p>
+    </section>
+
+    <section class="done">
+      <p>Nu ligger <b>Amning</b> på din hjemmeskærm med den blå dråbe. 💧<br>
+        Åbn den derfra fremover, ikke fra Safari.</p>
+      <p class="note">Har du en ældre iPhone, sidder Del-knappen (firkant med pil op) direkte nederst på skærmen. Så kan du springe trin 1 over.</p>
+      <a class="btn" href="./">Gå til appen</a>
+    </section>
+  </main>
+</body>
+</html>

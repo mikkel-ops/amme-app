@@ -56,6 +56,7 @@ html, body {
   font-size: 15px;
   line-height: 1.4;
 }
+.install-hint a { color: var(--ink); white-space: nowrap; }
 .install-hint button {
   position: absolute;
   right: 8px;
