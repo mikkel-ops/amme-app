@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="da">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Amning</title>
+  <meta name="theme-color" content="#f4cd5f">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Amning">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="icon-180.png">
+  <link rel="icon" href="icon-180.png">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <button class="icon-btn" id="settingsBtn" aria-label="Indstillinger">⚙︎</button>
+    <h1 id="title">Amning</h1>
+    <span class="icon-btn" aria-hidden="true"></span>
+  </header>
+
+  <div id="installHint" class="install-hint" hidden>
+    Tryk <b>Del</b> <span class="share">⬆︎</span> og vælg <b>“Føj til hjemmeskærm”</b> for at installere appen. Så bliver dine data gemt sikkert på telefonen.
+    <button id="installClose" aria-label="Luk">✕</button>
+  </div>
+
+  <main>
+    <section class="timers">
+      <div class="side" data-side="L">
+        <div class="last-badge" id="lastL">sidste side</div>
+        <div class="clock" id="clockL">0<small>M</small> 00<small>S</small></div>
+        <button class="pill" id="btnL">Start venstre</button>
+      </div>
+      <div class="side" data-side="R">
+        <div class="last-badge" id="lastR">sidste side</div>
+        <div class="clock" id="clockR">0<small>M</small> 00<small>S</small></div>
+        <button class="pill" id="btnR">Start højre</button>
+      </div>
+    </section>
+
+    <section class="session-bar" id="sessionBar" hidden>
+      <div class="row"><span>Starttid</span><span id="sessStart">–</span></div>
+      <div class="row"><span>Samlet tid</span><span id="sessTotal">–</span></div>
+      <div class="actions">
+        <button class="pill ghost" id="cancelBtn">Annullér</button>
+        <button class="pill solid" id="saveBtn">Gem</button>
+      </div>
+    </section>
+
+    <section class="since" id="since"></section>
+
+    <section class="history">
+      <h2>Historik</h2>
+      <div id="historyList"></div>
+    </section>
+  </main>
+
+  <dialog id="settings">
+    <form method="dialog" class="sheet">
+      <h2>Indstillinger</h2>
+      <label>Barnets navn
+        <input id="nameInput" type="text" placeholder="F.eks. Frida" autocomplete="off">
+      </label>
+      <button class="pill solid" id="nameSave" value="save">Gem navn</button>
+      <hr>
+      <p class="muted">Data ligger kun på denne telefon. Tag en backup en gang imellem.</p>
+      <button type="button" class="pill" id="exportBtn">Eksportér backup</button>
+      <button type="button" class="pill" id="importBtn">Importér backup</button>
+      <input type="file" id="importFile" accept="application/json,.json" hidden>
+      <hr>
+      <button class="pill ghost" value="close">Luk</button>
+    </form>
+  </dialog>
+
+  <script src="app.js"></script>
+</body>
+</html>
