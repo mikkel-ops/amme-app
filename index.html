@@ -40,18 +40,32 @@
     <section class="timers">
       <div class="side" data-side="L">
         <div class="last-badge" id="lastL">sidste side</div>
-        <div class="clock" id="clockL">0<small>M</small> 00<small>S</small></div>
+        <div class="clock-row">
+          <div class="clock" id="clockL">0<small>M</small> 00<small>S</small></div>
+          <button class="pencil" data-side="L" aria-label="Ret tid for venstre"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+        </div>
         <button class="pill" id="btnL">Start venstre</button>
       </div>
       <div class="side" data-side="R">
         <div class="last-badge" id="lastR">sidste side</div>
-        <div class="clock" id="clockR">0<small>M</small> 00<small>S</small></div>
+        <div class="clock-row">
+          <div class="clock" id="clockR">0<small>M</small> 00<small>S</small></div>
+          <button class="pencil" data-side="R" aria-label="Ret tid for højre"><svg viewBox="0 0 24 24" width="26" height="26" aria-hidden="true"><path d="M4 20l1-4L16 5l3 3L8 19l-4 1z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/></svg></button>
+        </div>
         <button class="pill" id="btnR">Start højre</button>
       </div>
     </section>
 
+    <section class="picker-panel" id="sidePanel" hidden>
+      <div class="row"><span id="sidePanelTitle">Venstre side</span><button class="done-btn" id="sideDone">Færdig</button></div>
+      <div class="wheels" id="sideWheels"></div>
+    </section>
+
     <section class="session-bar" id="sessionBar" hidden>
-      <div class="row"><span>Starttid</span><span id="sessStart">–</span></div>
+      <div class="row tappable" id="startRow"><span>Starttid</span><span id="sessStart">–</span><button class="done-btn" id="startDone" hidden>Færdig</button></div>
+      <div class="picker-panel" id="startPanel" hidden>
+        <div class="wheels" id="startWheels"></div>
+      </div>
       <div class="row"><span>Samlet tid</span><span id="sessTotal">–</span></div>
       <div class="actions">
         <button class="pill ghost" id="cancelBtn">Annullér</button>

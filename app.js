@@ -69,9 +69,15 @@ function toggle(side) {
   render();
 }
 
+function closePickers() {
+  if (startPick) closeStartPicker();
+  if (sidePick) closeSidePicker();
+}
+
 function save() {
   const a = state.active;
   if (!a) return;
+  closePickers();
   const now = Date.now();
   const L = Math.round(elapsed('L', now) / 1000);
   const R = Math.round(elapsed('R', now) / 1000);
@@ -86,6 +92,7 @@ function save() {
 
 function cancel() {
   if (!confirm('Annullér denne amning uden at gemme?')) return;
+  closePickers();
   state.active = null;
   persist();
   render();
@@ -99,6 +106,105 @@ function del(id) {
   persist();
   render();
   return true;
+}
+
+// ---------- Drejehjul ----------
+const ROW = 40;
+class Wheel {
+  constructor(parent, labels, index, cls) {
+    this.el = document.createElement('div');
+    this.el.className = 'wheel ' + (cls || '');
+    this.el.innerHTML = '<div class="pad"></div>' + labels.map((l) => `<div class="item">${l}</div>`).join('') + '<div class="pad"></div>';
+    this.items = [...this.el.querySelectorAll('.item')];
+    parent.appendChild(this.el);
+    this.el.addEventListener('scroll', () => this.mark(), { passive: true });
+    this.items.forEach((it, i) => it.addEventListener('click', () => this.el.scrollTo({ top: i * ROW, behavior: 'smooth' })));
+    requestAnimationFrame(() => { this.el.scrollTop = index * ROW; this.mark(); });
+  }
+  get index() { return Math.max(0, Math.min(this.items.length - 1, Math.round(this.el.scrollTop / ROW))); }
+  mark() {
+    const i = this.index;
+    if (i === this._last) return;
+    this._last = i;
+    this.items.forEach((it, k) => it.classList.toggle('sel', k === i));
+  }
+}
+const unit = (parent, txt) => { const s = document.createElement('span'); s.className = 'wheel-unit'; s.textContent = txt; parent.appendChild(s); };
+const range = (n) => Array.from({ length: n }, (_, i) => i);
+
+// --- Starttid for igangværende amning ---
+let startPick = null;
+function openStartPicker() {
+  const a = state.active;
+  if (!a || startPick) return closeStartPicker();
+  closeSidePicker();
+  const box = $('startWheels');
+  box.innerHTML = '';
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const days = range(7).map((i) => { const d = new Date(t0); d.setDate(t0.getDate() - 6 + i); return d; });
+  const s = new Date(a.start);
+  const dayIdx = Math.max(0, days.findIndex((d) => d.toDateString() === s.toDateString()));
+  const dayLabels = days.map((d, i) => (i === 6 ? 'I dag' : d.toLocaleDateString('da-DK', { weekday: 'short', day: 'numeric', month: 'short' })));
+  startPick = {
+    days,
+    d: new Wheel(box, dayLabels, dayIdx, 'wday'),
+    h: new Wheel(box, range(24).map(pad), s.getHours(), 'num'),
+    m: new Wheel(box, range(60).map(pad), s.getMinutes(), 'num'),
+  };
+  $('startPanel').hidden = false;
+  $('startDone').hidden = false;
+  $('sessStart').hidden = true;
+}
+function closeStartPicker(apply) {
+  if (startPick && apply && state.active) {
+    const d = new Date(startPick.days[startPick.d.index]);
+    d.setHours(startPick.h.index, startPick.m.index, 0, 0);
+    state.active.start = Math.min(d.getTime(), Date.now());
+    persist();
+  }
+  startPick = null;
+  $('startPanel').hidden = true;
+  $('startDone').hidden = true;
+  $('sessStart').hidden = false;
+  renderLive();
+}
+
+// --- Ret tiden på en side (blyanten) ---
+let sidePick = null;
+function openSidePicker(side) {
+  if (sidePick && sidePick.side === side) return closeSidePicker();
+  closeSidePicker();
+  if (startPick) closeStartPicker();
+  const box = $('sideWheels');
+  box.innerHTML = '';
+  const sec = Math.floor(elapsed(side) / 1000);
+  sidePick = {
+    side,
+    m: new Wheel(box, range(91).map(String), Math.min(90, Math.floor(sec / 60)), 'num'),
+  };
+  unit(box, 'min');
+  sidePick.s = new Wheel(box, range(60).map(pad), sec % 60, 'num');
+  unit(box, 'sek');
+  $('sidePanelTitle').textContent = side === 'L' ? 'Tid på venstre side' : 'Tid på højre side';
+  $('sidePanel').hidden = false;
+}
+function closeSidePicker(apply) {
+  if (sidePick && apply) {
+    const { side } = sidePick;
+    const ms = (sidePick.m.index * 60 + sidePick.s.index) * 1000;
+    const now = Date.now();
+    let a = state.active;
+    if (!a && ms > 0) a = state.active = { start: now - ms, acc: { L: 0, R: 0 }, running: null, since: now };
+    if (a) {
+      a.acc[side] = ms;
+      if (a.running === side) a.since = now;
+      state.lastSide = side;
+      persist();
+    }
+  }
+  sidePick = null;
+  $('sidePanel').hidden = true;
+  render();
 }
 
 // ---------- Redigering ----------
@@ -184,7 +290,7 @@ function renderLive() {
     const running = a && a.running === side;
     document.querySelector(`.side[data-side="${side}"]`).classList.toggle('running', !!running);
     const label = side === 'L' ? 'venstre' : 'højre';
-    $('btn' + side).textContent = running ? 'Pause' : `Start ${label}`;
+    $('btn' + side).textContent = running ? `Stop ${label}` : `Start ${label}`;
     $('last' + side).classList.toggle('show', state.lastSide === side);
   }
   $('sessionBar').hidden = !a;
@@ -424,6 +530,10 @@ $('saveBtn').addEventListener('click', save);
 $('cancelBtn').addEventListener('click', cancel);
 $('settingsBtn').addEventListener('click', openSettings);
 $('statsBtn').addEventListener('click', () => showStats(!statsOpen));
+$('startRow').addEventListener('click', (e) => { if (e.target.id !== 'startDone') openStartPicker(); });
+$('startDone').addEventListener('click', () => closeStartPicker(true));
+$('sideDone').addEventListener('click', () => closeSidePicker(true));
+document.querySelectorAll('.pencil').forEach((b) => b.addEventListener('click', () => openSidePicker(b.dataset.side)));
 
 // Installationsvejledning i Safari (ikke når appen kører fra hjemmeskærmen)
 const standalone = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;

@@ -101,7 +101,72 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
   font-weight: 400;
   margin-left: 1px;
 }
-.side.running .clock { color: #1f6f5c; }
+.clock-row { display: flex; align-items: flex-start; gap: 2px; margin-right: -26px; }
+.pencil {
+  border: 0;
+  background: none;
+  color: var(--ink);
+  padding: 2px;
+  margin-top: 6px;
+}
+.side.running .pencil { visibility: hidden; }
+
+/* ---------- Drejehjul (iOS-stil) ---------- */
+.picker-panel { border-bottom: 1px solid var(--line); }
+.done-btn {
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 600 18px var(--sans);
+  padding: 4px 0 4px 16px;
+}
+.row.tappable { cursor: pointer; }
+.wheels {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  gap: 4px;
+  padding: 4px 12px 16px;
+}
+.wheels::before {
+  content: "";
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  top: calc(4px + 2 * 40px);
+  height: 40px;
+  background: #f1f1f3;
+  border-radius: 10px;
+  pointer-events: none;
+}
+.wheel {
+  position: relative;
+  height: calc(5 * 40px);
+  overflow-y: scroll;
+  scroll-snap-type: y mandatory;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+  mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+  -webkit-mask-image: linear-gradient(transparent, #000 30%, #000 70%, transparent);
+}
+.wheel::-webkit-scrollbar { display: none; }
+.wheel .pad { height: 80px; }
+.wheel .item {
+  height: 40px;
+  line-height: 40px;
+  scroll-snap-align: center;
+  text-align: center;
+  font-size: 22px;
+  color: #b3b3b8;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: 0 10px;
+}
+.wheel .item.sel { color: #000; font-size: 25px; }
+.wheel.wday { min-width: 150px; }
+.wheel.wday .item { text-align: right; }
+.wheel.num { min-width: 64px; }
+.wheel-unit { align-self: center; color: var(--muted); font-size: 15px; margin-right: 8px; position: relative; }
 
 .pill {
   font: 600 18px var(--sans);
@@ -115,7 +180,7 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
 .pill:active { transform: scale(.97); }
 .pill.solid { background: var(--ink); color: #fff; }
 .pill.ghost { border-color: var(--line); }
-.side.running .pill { background: var(--ink); color: #fff; }
+.side.running .pill { background: #e06a36; border-color: #e06a36; color: #fff; }
 
 .session-bar { border-bottom: 1px solid var(--line); }
 .row {
