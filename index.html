@@ -18,7 +18,9 @@
   <header class="top">
     <button class="icon-btn" id="settingsBtn" aria-label="Indstillinger">⚙︎</button>
     <h1 id="title">Amning</h1>
-    <span class="icon-btn" aria-hidden="true"></span>
+    <button class="icon-btn" id="statsBtn" aria-label="Statistik">
+      <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 20V12M12 20V5M19 20v-9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>
+    </button>
   </header>
 
   <div id="installHint" class="install-hint" hidden>
@@ -26,7 +28,15 @@
     <button id="installClose" aria-label="Luk">✕</button>
   </div>
 
-  <main>
+  <section id="statsView" class="stats" hidden>
+    <div class="seg" role="tablist">
+      <button data-days="7" class="on">7 dage</button>
+      <button data-days="30">30 dage</button>
+    </div>
+    <div id="statsBody"></div>
+  </section>
+
+  <main id="mainView">
     <section class="timers">
       <div class="side" data-side="L">
         <div class="last-badge" id="lastL">sidste side</div>
