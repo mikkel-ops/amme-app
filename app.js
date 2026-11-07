@@ -208,7 +208,7 @@ let ed = null;
 function openEdit(id) {
   const s = state.sessions.find((x) => x.id === id);
   if (!s) return;
-  ed = { id, start: s.start, end: endOf(s), L: s.L, R: s.R, open: null };
+  ed = { id, start: s.start, end: endOf(s), L: s.L, R: s.R, open: null, ratioL: s.L + s.R > 0 ? s.L / (s.L + s.R) : 1 };
   closeEdWheels();
   $('edL').value = minStr(s.L);
   $('edR').value = minStr(s.R);
@@ -238,20 +238,15 @@ function toggleEdWheels(which) {
   const apply = () => {
     const v = get();
     if (v === ed[which]) return;
-    if (which === 'start') {
-      // Flyt hele amningen; varigheden er uændret
-      ed.end += v - ed.start;
-      ed.start = v;
-    } else {
-      // Ny sluttid: fordel den nye varighed på siderne i samme forhold
-      ed.end = v;
-      if (ed.end > ed.start) {
-        const dur = Math.round((ed.end - ed.start) / 1000), sum = ed.L + ed.R;
-        if (sum > 0) { ed.L = Math.round((dur * ed.L) / sum); ed.R = dur - ed.L; }
-        else { ed.L = dur; ed.R = 0; }
-        $('edL').value = minStr(ed.L);
-        $('edR').value = minStr(ed.R);
-      }
+    // Start eller slut ændret: den anden står stille, og den nye varighed
+    // fordeles på siderne i samme forhold som før
+    ed[which] = v;
+    if (ed.end > ed.start) {
+      const dur = Math.round((ed.end - ed.start) / 1000);
+      ed.L = Math.round(dur * ed.ratioL);
+      ed.R = dur - ed.L;
+      $('edL').value = minStr(ed.L);
+      $('edR').value = minStr(ed.R);
     }
     updateEd();
   };
@@ -272,6 +267,7 @@ function onSideChange() {
   ed.L = Math.max(0, Math.round((parseFloat($('edL').value.replace(',', '.')) || 0) * 60));
   ed.R = Math.max(0, Math.round((parseFloat($('edR').value.replace(',', '.')) || 0) * 60));
   ed.end = ed.start + (ed.L + ed.R) * 1000;
+  if (ed.L + ed.R > 0) ed.ratioL = ed.L / (ed.L + ed.R);
   if (ed.open === 'end') closeEdWheels();
   updateEd();
 }
