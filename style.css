@@ -101,15 +101,6 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
   font-weight: 400;
   margin-left: 1px;
 }
-.clock-row { display: flex; align-items: flex-start; gap: 2px; margin-right: -26px; }
-.pencil {
-  border: 0;
-  background: none;
-  color: var(--ink);
-  padding: 2px;
-  margin-top: 6px;
-}
-.side.running .pencil { visibility: hidden; }
 
 /* ---------- Drejehjul (iOS-stil) ---------- */
 .picker-panel { border-bottom: 1px solid var(--line); }
@@ -128,6 +119,7 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
   gap: 4px;
   padding: 4px 12px 16px;
 }
+.wheels[hidden] { display: none; }
 .wheels::before {
   content: "";
   position: absolute;
@@ -163,8 +155,11 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
   padding: 0 10px;
 }
 .wheel .item.sel { color: #000; font-size: 25px; }
-.wheel.wday { min-width: 150px; }
-.wheel.wday .item { text-align: right; }
+.wheel.wday { min-width: 96px; }
+.wheel.wday .item { font-size: 17px; color: #c4c4c8; }
+.wheel.wday .item.sel { font-size: 18px; color: #555; }
+.wheel.big .item { font-size: 26px; }
+.wheel.big .item.sel { font-size: 30px; font-weight: 500; }
 .wheel.num { min-width: 64px; }
 .wheel-unit { align-self: center; color: var(--muted); font-size: 15px; margin-right: 8px; position: relative; }
 
@@ -297,6 +292,28 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .sheet { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
 .sheet h2 { font-family: var(--serif); font-weight: 500; margin: 0 0 4px; }
 .sheet label { display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
+.ed-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  font-size: 17px;
+  cursor: pointer;
+}
+.ed-row .chip {
+  font-size: 19px;
+  font-weight: 500;
+  background: #f1f1f3;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-variant-numeric: tabular-nums;
+}
+.ed-row.open .chip { color: #1f6fd1; }
+.sheet .wheels { padding: 0 0 4px; margin: 0 -8px; }
+.sheet .wheels::before { left: 0; right: 0; top: 80px; }
+.sheet .wheel.wday { min-width: 90px; }
+.sheet .wheel.num { min-width: 64px; }
+dialog { max-height: 92vh; overflow-y: auto; }
 .sheet .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
 .pill.danger { background: #d93a3a; border-color: #d93a3a; color: #fff; }
 .sheet input[type=datetime-local], .sheet input[type=number] { min-height: 46px; background: #fff; color: var(--ink); width: 100%; }

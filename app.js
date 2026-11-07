@@ -71,7 +71,6 @@ function toggle(side) {
 
 function closePickers() {
   if (startPick) closeStartPicker();
-  if (sidePick) closeSidePicker();
 }
 
 function save() {
@@ -111,15 +110,23 @@ function del(id) {
 // ---------- Drejehjul ----------
 const ROW = 40;
 class Wheel {
-  constructor(parent, labels, index, cls) {
+  constructor(parent, labels, index, cls, onChange) {
     this.el = document.createElement('div');
     this.el.className = 'wheel ' + (cls || '');
     this.el.innerHTML = '<div class="pad"></div>' + labels.map((l) => `<div class="item">${l}</div>`).join('') + '<div class="pad"></div>';
     this.items = [...this.el.querySelectorAll('.item')];
+    this.onChange = onChange;
     parent.appendChild(this.el);
     this.el.addEventListener('scroll', () => this.mark(), { passive: true });
     this.items.forEach((it, i) => it.addEventListener('click', () => this.el.scrollTo({ top: i * ROW, behavior: 'smooth' })));
-    requestAnimationFrame(() => { this.el.scrollTop = index * ROW; this.mark(); });
+    for (const ev of ['pointerdown', 'touchstart', 'wheel']) this.el.addEventListener(ev, () => { this.touched = true; }, { passive: true });
+    // Sæt startposition med det samme (kræver at boksen er synlig), og igen i næste frame som fallback
+    this.el.scrollTop = index * ROW;
+    this.mark();
+    this.ready = true;
+    requestAnimationFrame(() => {
+      if (!this.touched && this.el.scrollTop !== index * ROW) { this.el.scrollTop = index * ROW; this.mark(); }
+    });
   }
   get index() { return Math.max(0, Math.min(this.items.length - 1, Math.round(this.el.scrollTop / ROW))); }
   mark() {
@@ -127,39 +134,54 @@ class Wheel {
     if (i === this._last) return;
     this._last = i;
     this.items.forEach((it, k) => it.classList.toggle('sel', k === i));
+    if (this.ready && this.onChange) this.onChange();
   }
 }
-const unit = (parent, txt) => { const s = document.createElement('span'); s.className = 'wheel-unit'; s.textContent = txt; parent.appendChild(s); };
 const range = (n) => Array.from({ length: n }, (_, i) => i);
+
+// Tre hjul (dag, time, minut). Returnerer en funktion, der giver det valgte tidspunkt.
+function dateWheels(box, ts, onChange) {
+  box.innerHTML = '';
+  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const s = new Date(ts);
+  const sd = new Date(s); sd.setHours(0, 0, 0, 0);
+  let first = new Date(t0); first.setDate(t0.getDate() - 6);
+  if (sd < first) first = sd;
+  const days = [];
+  for (const d = new Date(first); d <= t0; d.setDate(d.getDate() + 1)) days.push(new Date(d));
+  const labels = days.map((d, i) => {
+    const back = days.length - 1 - i;
+    if (back === 0) return 'I dag';
+    if (back === 1) return 'I går';
+    return `${WD[d.getDay()]} ${d.getDate()}/${d.getMonth() + 1}`;
+  });
+  const idx = Math.max(0, days.findIndex((d) => d.toDateString() === s.toDateString()));
+  // Tidspunktet er det vigtigste: time og minut først og størst, dagen til sidst
+  const w = {
+    h: new Wheel(box, range(24).map(pad), s.getHours(), 'num big', onChange),
+    m: new Wheel(box, range(60).map(pad), s.getMinutes(), 'num big', onChange),
+    d: new Wheel(box, labels, idx, 'wday', onChange),
+  };
+  return () => {
+    const d = new Date(days[w.d.index]);
+    d.setHours(w.h.index, w.m.index, 0, 0);
+    return d.getTime();
+  };
+}
 
 // --- Starttid for igangværende amning ---
 let startPick = null;
 function openStartPicker() {
   const a = state.active;
   if (!a || startPick) return closeStartPicker();
-  closeSidePicker();
-  const box = $('startWheels');
-  box.innerHTML = '';
-  const t0 = new Date(); t0.setHours(0, 0, 0, 0);
-  const days = range(7).map((i) => { const d = new Date(t0); d.setDate(t0.getDate() - 6 + i); return d; });
-  const s = new Date(a.start);
-  const dayIdx = Math.max(0, days.findIndex((d) => d.toDateString() === s.toDateString()));
-  const dayLabels = days.map((d, i) => (i === 6 ? 'I dag' : d.toLocaleDateString('da-DK', { weekday: 'short', day: 'numeric', month: 'short' })));
-  startPick = {
-    days,
-    d: new Wheel(box, dayLabels, dayIdx, 'wday'),
-    h: new Wheel(box, range(24).map(pad), s.getHours(), 'num'),
-    m: new Wheel(box, range(60).map(pad), s.getMinutes(), 'num'),
-  };
   $('startPanel').hidden = false;
+  startPick = { get: dateWheels($('startWheels'), a.start) };
   $('startDone').hidden = false;
   $('sessStart').hidden = true;
 }
 function closeStartPicker(apply) {
   if (startPick && apply && state.active) {
-    const d = new Date(startPick.days[startPick.d.index]);
-    d.setHours(startPick.h.index, startPick.m.index, 0, 0);
-    state.active.start = Math.min(d.getTime(), Date.now());
+    state.active.start = Math.min(startPick.get(), Date.now());
     persist();
   }
   startPick = null;
@@ -169,111 +191,105 @@ function closeStartPicker(apply) {
   renderLive();
 }
 
-// --- Ret tiden på en side (blyanten) ---
-let sidePick = null;
-function openSidePicker(side) {
-  if (sidePick && sidePick.side === side) return closeSidePicker();
-  closeSidePicker();
-  if (startPick) closeStartPicker();
-  const box = $('sideWheels');
-  box.innerHTML = '';
-  const sec = Math.floor(elapsed(side) / 1000);
-  sidePick = {
-    side,
-    m: new Wheel(box, range(91).map(String), Math.min(90, Math.floor(sec / 60)), 'num'),
-  };
-  unit(box, 'min');
-  sidePick.s = new Wheel(box, range(60).map(pad), sec % 60, 'num');
-  unit(box, 'sek');
-  $('sidePanelTitle').textContent = side === 'L' ? 'Tid på venstre side' : 'Tid på højre side';
-  $('sidePanel').hidden = false;
-}
-function closeSidePicker(apply) {
-  if (sidePick && apply) {
-    const { side } = sidePick;
-    const ms = (sidePick.m.index * 60 + sidePick.s.index) * 1000;
-    const now = Date.now();
-    let a = state.active;
-    if (!a && ms > 0) a = state.active = { start: now - ms, acc: { L: 0, R: 0 }, running: null, since: now };
-    if (a) {
-      a.acc[side] = ms;
-      if (a.running === side) a.since = now;
-      state.lastSide = side;
-      persist();
-    }
-  }
-  sidePick = null;
-  $('sidePanel').hidden = true;
-  render();
-}
-
 // ---------- Redigering ----------
 const endOf = (s) => s.end || s.start + (s.L + s.R) * 1000;
-const toLocalInput = (ts) => {
-  const d = new Date(ts);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
-};
-const fromLocalInput = (v) => (v ? new Date(v).getTime() : NaN);
 const minStr = (sec) => String(Math.round(sec / 6) / 10);
+function fmtDT(ts) {
+  const d = new Date(ts), t0 = new Date(); t0.setHours(0, 0, 0, 0);
+  const back = Math.round((t0 - new Date(d).setHours(0, 0, 0, 0)) / 864e5);
+  if (back === 0) return fmtTime(ts);
+  if (back === 1) return `i går ${fmtTime(ts)}`;
+  return `${d.getDate()}/${d.getMonth() + 1} ${fmtTime(ts)}`;
+}
 
-// ed = { id, L, R } i sekunder, så vi ikke mister præcision ved afrunding
+// ed = { id, start, end, L, R (sek), open: 'start'|'end'|null }
 let ed = null;
 
 function openEdit(id) {
   const s = state.sessions.find((x) => x.id === id);
   if (!s) return;
-  ed = { id, L: s.L, R: s.R };
-  $('edStart').value = toLocalInput(s.start);
-  $('edEnd').value = toLocalInput(endOf(s));
+  ed = { id, start: s.start, end: endOf(s), L: s.L, R: s.R, open: null };
+  closeEdWheels();
   $('edL').value = minStr(s.L);
   $('edR').value = minStr(s.R);
-  updateEdInfo();
+  updateEd();
   $('editDlg').returnValue = '';
   $('editDlg').showModal();
 }
 
-function updateEdInfo() {
-  const start = fromLocalInput($('edStart').value), end = fromLocalInput($('edEnd').value);
-  const bad = !(end > start);
-  $('edInfo').textContent = bad ? 'Slut skal være efter start.' : `Samlet amning: ${fmtDur(Math.round(ed.L + ed.R))}`;
-  $('edInfo').style.color = bad ? 'var(--danger)' : '';
+function closeEdWheels() {
+  for (const k of ['start', 'end']) {
+    const box = $(k === 'start' ? 'edStartWheels' : 'edEndWheels');
+    box.hidden = true;
+    box.innerHTML = '';
+    $(k === 'start' ? 'edStartRow' : 'edEndRow').classList.remove('open');
+  }
+  if (ed) { ed.open = null; ed.apply = null; }
 }
 
-// Ændres start/slut: fordel den nye varighed på siderne i samme forhold som før
-function onTimeChange() {
-  const start = fromLocalInput($('edStart').value), end = fromLocalInput($('edEnd').value);
-  if (end > start) {
-    const dur = Math.round((end - start) / 1000), sum = ed.L + ed.R;
-    if (sum > 0) { ed.L = Math.round((dur * ed.L) / sum); ed.R = dur - ed.L; }
-    else { ed.L = dur; ed.R = 0; }
-    $('edL').value = minStr(ed.L);
-    $('edR').value = minStr(ed.R);
-  }
-  updateEdInfo();
+function toggleEdWheels(which) {
+  const was = ed.open;
+  closeEdWheels();
+  if (was === which) return;
+  ed.open = which;
+  const box = $(which === 'start' ? 'edStartWheels' : 'edEndWheels');
+  box.hidden = false;
+  $(which === 'start' ? 'edStartRow' : 'edEndRow').classList.add('open');
+  const apply = () => {
+    const v = get();
+    if (v === ed[which]) return;
+    if (which === 'start') {
+      // Flyt hele amningen; varigheden er uændret
+      ed.end += v - ed.start;
+      ed.start = v;
+    } else {
+      // Ny sluttid: fordel den nye varighed på siderne i samme forhold
+      ed.end = v;
+      if (ed.end > ed.start) {
+        const dur = Math.round((ed.end - ed.start) / 1000), sum = ed.L + ed.R;
+        if (sum > 0) { ed.L = Math.round((dur * ed.L) / sum); ed.R = dur - ed.L; }
+        else { ed.L = dur; ed.R = 0; }
+        $('edL').value = minStr(ed.L);
+        $('edR').value = minStr(ed.R);
+      }
+    }
+    updateEd();
+  };
+  const get = dateWheels(box, ed[which], apply);
+  ed.apply = apply;
+}
+
+function updateEd() {
+  $('edStartTxt').textContent = fmtDT(ed.start);
+  $('edEndTxt').textContent = fmtDT(ed.end);
+  const bad = !(ed.end > ed.start);
+  $('edInfo').textContent = bad ? 'Slut skal være efter start.' : `Samlet amning: ${fmtDur(Math.round(ed.L + ed.R))}`;
+  $('edInfo').style.color = bad ? 'var(--danger)' : '';
 }
 
 // Ændres minutterne: flyt sluttidspunktet tilsvarende
 function onSideChange() {
   ed.L = Math.max(0, Math.round((parseFloat($('edL').value.replace(',', '.')) || 0) * 60));
   ed.R = Math.max(0, Math.round((parseFloat($('edR').value.replace(',', '.')) || 0) * 60));
-  const start = fromLocalInput($('edStart').value);
-  if (!isNaN(start)) $('edEnd').value = toLocalInput(start + (ed.L + ed.R) * 1000);
-  updateEdInfo();
+  ed.end = ed.start + (ed.L + ed.R) * 1000;
+  if (ed.open === 'end') closeEdWheels();
+  updateEd();
 }
 
-$('edStart').addEventListener('change', onTimeChange);
-$('edEnd').addEventListener('change', onTimeChange);
+$('edStartRow').addEventListener('click', () => toggleEdWheels('start'));
+$('edEndRow').addEventListener('click', () => toggleEdWheels('end'));
 $('edL').addEventListener('input', onSideChange);
 $('edR').addEventListener('input', onSideChange);
 $('edDelete').addEventListener('click', () => { if (del(ed.id)) $('editDlg').close('deleted'); });
 
-$('editDlg').addEventListener('close', () => {
-  if ($('editDlg').returnValue !== 'save' || !ed) return;
+// Gem via formularens submit (synkront) i stedet for dialogens close-event, som ikke altid affyres
+$('editDlg').querySelector('form').addEventListener('submit', (e) => {
+  if (!e.submitter || e.submitter.value !== 'save' || !ed) return;
+  if (ed.apply) ed.apply(); // tag hjulets sidste position med, selv hvis scroll stadig var i gang
   const s = state.sessions.find((x) => x.id === ed.id);
-  const start = fromLocalInput($('edStart').value), end = fromLocalInput($('edEnd').value);
-  if (!s || !(end > start)) { alert('Ændringerne blev ikke gemt: slut skal være efter start.'); return; }
-  s.start = start;
-  s.end = end;
+  if (!s || !(ed.end > ed.start)) { alert('Ændringerne blev ikke gemt: slut skal være efter start.'); return; }
+  s.start = ed.start;
+  s.end = ed.end;
   s.L = ed.L;
   s.R = ed.R;
   state.sessions.sort((x, y) => y.start - x.start);
@@ -295,8 +311,7 @@ function renderLive() {
   }
   $('sessionBar').hidden = !a;
   if (a) {
-    const d = new Date(a.start);
-    $('sessStart').textContent = `${d.toLocaleDateString('da-DK', { day: 'numeric', month: 'short' })} ${fmtTime(a.start)}`;
+    $('sessStart').textContent = fmtDT(a.start);
     $('sessTotal').textContent = fmtDur(Math.floor((elapsed('L', now) + elapsed('R', now)) / 1000));
   }
   const last = state.sessions[0];
@@ -532,8 +547,6 @@ $('settingsBtn').addEventListener('click', openSettings);
 $('statsBtn').addEventListener('click', () => showStats(!statsOpen));
 $('startRow').addEventListener('click', (e) => { if (e.target.id !== 'startDone') openStartPicker(); });
 $('startDone').addEventListener('click', () => closeStartPicker(true));
-$('sideDone').addEventListener('click', () => closeSidePicker(true));
-document.querySelectorAll('.pencil').forEach((b) => b.addEventListener('click', () => openSidePicker(b.dataset.side)));
 
 // Installationsvejledning i Safari (ikke når appen kører fra hjemmeskærmen)
 const standalone = window.navigator.standalone === true || matchMedia('(display-mode: standalone)').matches;
