@@ -163,6 +163,7 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + 24px); }
   font-variant-numeric: tabular-nums;
 }
 .entry .time { font-weight: 600; font-size: 17px; }
+.entry .to { font-weight: 400; color: var(--muted); font-size: 15px; }
 .entry .sides { color: var(--muted); font-size: 15px; }
 .entry .total { font-size: 16px; }
 .empty { color: var(--muted); padding: 16px 20px; }
@@ -231,7 +232,10 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .sheet { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
 .sheet h2 { font-family: var(--serif); font-weight: 500; margin: 0 0 4px; }
 .sheet label { display: flex; flex-direction: column; gap: 6px; font-size: 15px; }
-.sheet input[type=text] {
+.sheet .two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.pill.danger { color: var(--danger); border-color: var(--line); }
+.sheet input[type=datetime-local], .sheet input[type=number] { min-height: 46px; background: #fff; color: var(--ink); width: 100%; }
+.sheet input[type=text], .sheet input[type=datetime-local], .sheet input[type=number] {
   font-size: 17px;
   padding: 12px;
   border: 1px solid var(--line);

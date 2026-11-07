@@ -84,6 +84,30 @@
     </form>
   </dialog>
 
+  <dialog id="editDlg">
+    <form method="dialog" class="sheet">
+      <h2>Redigér amning</h2>
+      <label>Start
+        <input type="datetime-local" id="edStart">
+      </label>
+      <label>Slut
+        <input type="datetime-local" id="edEnd">
+      </label>
+      <div class="two">
+        <label>Venstre (min)
+          <input type="number" id="edL" inputmode="decimal" min="0" step="any">
+        </label>
+        <label>Højre (min)
+          <input type="number" id="edR" inputmode="decimal" min="0" step="any">
+        </label>
+      </div>
+      <p class="muted" id="edInfo"></p>
+      <button class="pill solid" value="save">Gem ændringer</button>
+      <button type="button" class="pill danger" id="edDelete">Slet amning</button>
+      <button class="pill ghost" value="cancel" formnovalidate>Annullér</button>
+    </form>
+  </dialog>
+
   <script src="app.js"></script>
 </body>
 </html>

@@ -93,12 +93,87 @@ function cancel() {
 
 function del(id) {
   const s = state.sessions.find((x) => x.id === id);
-  if (!s) return;
-  if (!confirm(`Slet amning kl. ${fmtTime(s.start)} (${fmtDur(s.L + s.R)})?`)) return;
+  if (!s) return false;
+  if (!confirm(`Slet amning kl. ${fmtTime(s.start)} (${fmtDur(s.L + s.R)})?`)) return false;
   state.sessions = state.sessions.filter((x) => x.id !== id);
   persist();
   render();
+  return true;
 }
+
+// ---------- Redigering ----------
+const endOf = (s) => s.end || s.start + (s.L + s.R) * 1000;
+const toLocalInput = (ts) => {
+  const d = new Date(ts);
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
+const fromLocalInput = (v) => (v ? new Date(v).getTime() : NaN);
+const minStr = (sec) => String(Math.round(sec / 6) / 10);
+
+// ed = { id, L, R } i sekunder, så vi ikke mister præcision ved afrunding
+let ed = null;
+
+function openEdit(id) {
+  const s = state.sessions.find((x) => x.id === id);
+  if (!s) return;
+  ed = { id, L: s.L, R: s.R };
+  $('edStart').value = toLocalInput(s.start);
+  $('edEnd').value = toLocalInput(endOf(s));
+  $('edL').value = minStr(s.L);
+  $('edR').value = minStr(s.R);
+  updateEdInfo();
+  $('editDlg').returnValue = '';
+  $('editDlg').showModal();
+}
+
+function updateEdInfo() {
+  const start = fromLocalInput($('edStart').value), end = fromLocalInput($('edEnd').value);
+  const bad = !(end > start);
+  $('edInfo').textContent = bad ? 'Slut skal være efter start.' : `Samlet amning: ${fmtDur(Math.round(ed.L + ed.R))}`;
+  $('edInfo').style.color = bad ? 'var(--danger)' : '';
+}
+
+// Ændres start/slut: fordel den nye varighed på siderne i samme forhold som før
+function onTimeChange() {
+  const start = fromLocalInput($('edStart').value), end = fromLocalInput($('edEnd').value);
+  if (end > start) {
+    const dur = Math.round((end - start) / 1000), sum = ed.L + ed.R;
+    if (sum > 0) { ed.L = Math.round((dur * ed.L) / sum); ed.R = dur - ed.L; }
+    else { ed.L = dur; ed.R = 0; }
+    $('edL').value = minStr(ed.L);
+    $('edR').value = minStr(ed.R);
+  }
+  updateEdInfo();
+}
+
+// Ændres minutterne: flyt sluttidspunktet tilsvarende
+function onSideChange() {
+  ed.L = Math.max(0, Math.round((parseFloat($('edL').value.replace(',', '.')) || 0) * 60));
+  ed.R = Math.max(0, Math.round((parseFloat($('edR').value.replace(',', '.')) || 0) * 60));
+  const start = fromLocalInput($('edStart').value);
+  if (!isNaN(start)) $('edEnd').value = toLocalInput(start + (ed.L + ed.R) * 1000);
+  updateEdInfo();
+}
+
+$('edStart').addEventListener('change', onTimeChange);
+$('edEnd').addEventListener('change', onTimeChange);
+$('edL').addEventListener('input', onSideChange);
+$('edR').addEventListener('input', onSideChange);
+$('edDelete').addEventListener('click', () => { if (del(ed.id)) $('editDlg').close('deleted'); });
+
+$('editDlg').addEventListener('close', () => {
+  if ($('editDlg').returnValue !== 'save' || !ed) return;
+  const s = state.sessions.find((x) => x.id === ed.id);
+  const start = fromLocalInput($('edStart').value), end = fromLocalInput($('edEnd').value);
+  if (!s || !(end > start)) { alert('Ændringerne blev ikke gemt: slut skal være efter start.'); return; }
+  s.start = start;
+  s.end = end;
+  s.L = ed.L;
+  s.R = ed.R;
+  state.sessions.sort((x, y) => y.start - x.start);
+  persist();
+  render();
+});
 
 // ---------- Visning ----------
 function renderLive() {
@@ -144,10 +219,10 @@ function renderHistory() {
     const row = document.createElement('div');
     row.className = 'entry';
     row.innerHTML = `
-      <span class="time">${fmtTime(s.start)}</span>
+      <span class="time">${fmtTime(s.start)}<span class="to">–${fmtTime(endOf(s))}</span></span>
       <span class="sides">V ${fmtShort(s.L)} · H ${fmtShort(s.R)}</span>
       <span class="total">${fmtDur(s.L + s.R)}</span>`;
-    row.addEventListener('click', () => del(s.id));
+    row.addEventListener('click', () => openEdit(s.id));
     list.appendChild(row);
   }
 }
@@ -296,6 +371,7 @@ document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('clic
 // ---------- Indstillinger + backup ----------
 function openSettings() {
   $('nameInput').value = state.name || '';
+  $('settings').returnValue = '';
   $('settings').showModal();
 }
 $('settings').addEventListener('close', () => {
