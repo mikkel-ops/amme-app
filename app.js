@@ -204,6 +204,8 @@ function closeStartPicker(apply) {
 
 // ---------- Redigering ----------
 const endOf = (s) => s.end || s.start + (s.L + s.R) * 1000;
+// Pause mellem to amninger: fra den førstes slut til den næstes start (0 hvis de overlapper)
+const gapBetween = (prev, next) => Math.max(0, next.start - endOf(prev));
 const minStr = (sec) => String(Math.round(sec / 6) / 10);
 function fmtDT(ts) {
   const d = new Date(ts), t0 = new Date(); t0.setHours(0, 0, 0, 0);
@@ -295,6 +297,7 @@ $('editDlg').querySelector('form').addEventListener('submit', (e) => {
   if (ed.apply) ed.apply(); // tag hjulets sidste position med, selv hvis scroll stadig var i gang
   const s = state.sessions.find((x) => x.id === ed.id);
   if (!s || !(ed.end > ed.start)) { alert('Ændringerne blev ikke gemt: slut skal være efter start.'); return; }
+  if (ed.end > Date.now() + 60000) { alert('Ændringerne blev ikke gemt: slut kan ikke ligge i fremtiden.'); return; }
   s.start = ed.start;
   s.end = ed.end;
   s.L = ed.L;
@@ -321,8 +324,9 @@ function renderLive() {
     $('sessStart').textContent = fmtDT(a.start);
     $('sessTotal').textContent = fmtDur(Math.floor((elapsed('L', now) + elapsed('R', now)) / 1000));
   }
-  const last = state.sessions[0];
-  $('since').textContent = !a && last ? `Siden sidste amning sluttede: ${fmtAgo(now - endOf(last))}` : '';
+  // Seneste sluttid – ikke nødvendigvis sessions[0], som er sorteret efter start
+  const lastEnd = state.sessions.reduce((m, s) => Math.max(m, endOf(s)), 0);
+  $('since').textContent = !a && lastEnd ? `Sidste amning sluttede for ${fmtAgo(Math.max(0, now - lastEnd))} siden` : '';
   renderSleepLive(now);
   const lastD = state.diapers[0];
   $('diaperSince').textContent = lastD ? `Siden sidste ble: ${fmtAgo(now - lastD.ts)} · ${lastD.kind}` : '';
@@ -412,11 +416,11 @@ function computeStats(days) {
   const sumL = inPeriod.reduce((t, s) => t + s.L, 0);
   const sumR = inPeriod.reduce((t, s) => t + s.R, 0);
   let gapSum = 0;
-  for (let i = 1; i < n; i++) gapSum += inPeriod[i].start - inPeriod[i - 1].start;
+  for (let i = 1; i < n; i++) gapSum += gapBetween(inPeriod[i - 1], inPeriod[i]);
 
   const today = buckets[buckets.length - 1].list;
   let longest = 0;
-  for (let i = 1; i < today.length; i++) longest = Math.max(longest, today[i].start - today[i - 1].start);
+  for (let i = 1; i < today.length; i++) longest = Math.max(longest, gapBetween(today[i - 1], today[i]));
 
   return {
     buckets, n, firstIdx,
