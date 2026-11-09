@@ -311,7 +311,7 @@ function renderLive() {
     $('sessTotal').textContent = fmtDur(Math.floor((elapsed('L', now) + elapsed('R', now)) / 1000));
   }
   const last = state.sessions[0];
-  $('since').textContent = !a && last ? `Siden sidste amning: ${fmtAgo(now - last.start)}` : '';
+  $('since').textContent = !a && last ? `Siden sidste amning sluttede: ${fmtAgo(now - endOf(last))}` : '';
 }
 
 function renderHistory() {
