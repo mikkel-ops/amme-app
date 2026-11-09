@@ -322,7 +322,7 @@ function renderLive() {
     $('sessTotal').textContent = fmtDur(Math.floor((elapsed('L', now) + elapsed('R', now)) / 1000));
   }
   const last = state.sessions[0];
-  $('since').textContent = !a && last ? `Siden sidste amning: ${fmtAgo(now - last.start)}` : '';
+  $('since').textContent = !a && last ? `Siden sidste amning sluttede: ${fmtAgo(now - endOf(last))}` : '';
   renderSleepLive(now);
   const lastD = state.diapers[0];
   $('diaperSince').textContent = lastD ? `Siden sidste ble: ${fmtAgo(now - lastD.ts)} · ${lastD.kind}` : '';
