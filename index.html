@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <title>Amning</title>
-  <meta name="theme-color" content="#f4cd5f">
+  <meta name="theme-color" id="themeColor" content="#f4cd5f">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -74,6 +74,47 @@
     </section>
   </main>
 
+  <main id="diaperView" class="tab-view" hidden>
+    <section class="diaper-btns">
+      <button class="circle" data-kind="tis">Tis</button>
+      <button class="circle" data-kind="lort">Lort</button>
+    </section>
+    <div class="flash" id="diaperFlash"></div>
+    <section class="since" id="diaperSince"></section>
+    <section class="history">
+      <h2>Historik</h2>
+      <div id="diaperList"></div>
+    </section>
+  </main>
+
+  <main id="sleepView" class="tab-view" hidden>
+    <section class="sleep-top">
+      <div class="sleep-label" id="sleepLabel">Sover ikke</div>
+      <div class="clock sleep-clock" id="sleepClock">0<small>T</small> 00<small>M</small> 00<small>S</small></div>
+      <button class="pill" id="sleepBtn">Start søvn</button>
+    </section>
+    <section class="session-bar" id="sleepBar" hidden>
+      <div class="row tappable" id="sleepStartRow"><span>Starttid</span><span id="sleepStart">–</span><button class="done-btn" id="sleepStartDone" hidden>Færdig</button></div>
+      <div class="picker-panel" id="sleepStartPanel" hidden>
+        <div class="wheels" id="sleepStartWheels"></div>
+      </div>
+      <div class="actions">
+        <button class="pill ghost" id="sleepCancel">Annullér</button>
+      </div>
+    </section>
+    <section class="since" id="sleepSince"></section>
+    <section class="history">
+      <div class="hist-head"><h2>Historik</h2><button class="add-btn" id="sleepAdd">+ Tilføj søvn</button></div>
+      <div id="sleepList"></div>
+    </section>
+  </main>
+
+  <nav class="tabs" id="tabs">
+    <button data-tab="feed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z"/></svg>Amning</button>
+    <button data-tab="diaper"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v3a9 9 0 0 1-18 0zM8 13.5c1.2 2.5 6.8 2.5 8 0"/></svg>Ble</button>
+    <button data-tab="sleep"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 15.5A8 8 0 0 1 8.5 5a8 8 0 1 0 10.5 10.5z"/></svg>Søvn</button>
+  </nav>
+
   <dialog id="settings">
     <form method="dialog" class="sheet">
       <h2>Indstillinger</h2>
@@ -109,6 +150,35 @@
       <p class="muted" id="edInfo"></p>
       <button class="pill solid" value="save">Gem ændringer</button>
       <button type="button" class="pill danger" id="edDelete">Slet amning</button>
+      <button class="pill ghost" value="cancel" formnovalidate>Annullér</button>
+    </form>
+  </dialog>
+
+  <dialog id="diaperDlg">
+    <form method="dialog" class="sheet">
+      <h2 tabindex="-1" autofocus style="outline:none">Redigér ble</h2>
+      <div class="ed-row" id="dpTimeRow"><span>Tidspunkt</span><span class="chip" id="dpTimeTxt"></span></div>
+      <div class="wheels" id="dpTimeWheels" hidden></div>
+      <div class="seg kind-seg" id="dpKind">
+        <button type="button" data-kind="tis">Tis</button>
+        <button type="button" data-kind="lort">Lort</button>
+      </div>
+      <button class="pill solid" value="save">Gem ændringer</button>
+      <button type="button" class="pill danger" id="dpDelete">Slet ble</button>
+      <button class="pill ghost" value="cancel" formnovalidate>Annullér</button>
+    </form>
+  </dialog>
+
+  <dialog id="sleepDlg">
+    <form method="dialog" class="sheet">
+      <h2 tabindex="-1" autofocus style="outline:none" id="slTitle">Redigér søvn</h2>
+      <div class="ed-row" id="slStartRow"><span>Start</span><span class="chip" id="slStartTxt"></span></div>
+      <div class="wheels" id="slStartWheels" hidden></div>
+      <div class="ed-row" id="slEndRow"><span>Slut</span><span class="chip" id="slEndTxt"></span></div>
+      <div class="wheels" id="slEndWheels" hidden></div>
+      <p class="muted" id="slInfo"></p>
+      <button class="pill solid" value="save">Gem</button>
+      <button type="button" class="pill danger" id="slDelete">Slet søvn</button>
       <button class="pill ghost" value="cancel" formnovalidate>Annullér</button>
     </form>
   </dialog>

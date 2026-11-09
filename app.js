@@ -7,9 +7,15 @@ const $ = (id) => document.getElementById(id);
 function load() {
   try {
     const s = JSON.parse(localStorage.getItem(KEY));
-    if (s && Array.isArray(s.sessions)) return s;
+    if (s && Array.isArray(s.sessions)) {
+      // Migrering: ble og søvn kom til senere
+      if (!Array.isArray(s.diapers)) s.diapers = [];
+      if (!Array.isArray(s.sleeps)) s.sleeps = [];
+      if (s.sleepActive === undefined) s.sleepActive = null;
+      return s;
+    }
   } catch (e) {}
-  return { name: '', lastSide: null, active: null, sessions: [] };
+  return { name: '', lastSide: null, active: null, sessions: [], diapers: [], sleeps: [], sleepActive: null };
 }
 let state = load();
 function persist() {
@@ -26,6 +32,10 @@ const fmtClock = (ms) => {
 const fmtDur = (sec) => {
   const m = Math.floor(sec / 60), s = sec % 60;
   return m ? `${m}m ${s}s` : `${s}s`;
+};
+const fmtClockH = (ms) => {
+  const s = Math.floor(ms / 1000);
+  return `${Math.floor(s / 3600)}<small>T</small> ${pad(Math.floor(s / 60) % 60)}<small>M</small> ${pad(s % 60)}<small>S</small>`;
 };
 const fmtShort = (sec) => `${Math.floor(sec / 60)}:${pad(sec % 60)}`;
 const fmtTime = (ts) => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
@@ -71,6 +81,7 @@ function toggle(side) {
 
 function closePickers() {
   if (startPick) closeStartPicker();
+  if (sleepPick) closeSleepPicker();
 }
 
 function save() {
@@ -312,6 +323,9 @@ function renderLive() {
   }
   const last = state.sessions[0];
   $('since').textContent = !a && last ? `Siden sidste amning: ${fmtAgo(now - last.start)}` : '';
+  renderSleepLive(now);
+  const lastD = state.diapers[0];
+  $('diaperSince').textContent = lastD ? `Siden sidste ble: ${fmtAgo(now - lastD.ts)} · ${lastD.kind}` : '';
 }
 
 function renderHistory() {
@@ -352,6 +366,8 @@ function render() {
   renderTitle();
   renderLive();
   renderHistory();
+  renderDiapers();
+  renderSleeps();
   if (statsOpen) renderStats();
 }
 
@@ -368,8 +384,7 @@ const fmtHM = (sec) => {
 function showStats(open) {
   statsOpen = open;
   statsSel = null;
-  $('statsView').hidden = !open;
-  $('mainView').hidden = open;
+  applyViews();
   $('statsBtn').innerHTML = open
     ? '<span style="font-size:22px">✕</span>'
     : '<svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M5 20V12M12 20V5M19 20v-9" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" fill="none"/></svg>';
@@ -478,12 +493,286 @@ function renderStats() {
   }));
 }
 
-document.querySelectorAll('.seg button').forEach((b) => b.addEventListener('click', () => {
-  document.querySelectorAll('.seg button').forEach((x) => x.classList.toggle('on', x === b));
+document.querySelectorAll('#statsView .seg button').forEach((b) => b.addEventListener('click', () => {
+  document.querySelectorAll('#statsView .seg button').forEach((x) => x.classList.toggle('on', x === b));
   statsDays = +b.dataset.days;
   statsSel = null;
   renderStats();
 }));
+
+// ---------- Faner ----------
+const TAB_COLOR = { feed: '#f4cd5f', diaper: '#efe6d2', sleep: '#bfe0ee' };
+const TAB_VIEW = { feed: 'mainView', diaper: 'diaperView', sleep: 'sleepView' };
+let tab = 'feed';
+try { const t = localStorage.getItem('amme-tab'); if (TAB_VIEW[t]) tab = t; } catch (e) {}
+
+function applyViews() {
+  $('statsView').hidden = !statsOpen;
+  for (const t in TAB_VIEW) $(TAB_VIEW[t]).hidden = statsOpen || t !== tab;
+  document.body.className = 'tab-' + tab;
+  $('themeColor').setAttribute('content', TAB_COLOR[tab]);
+  document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+}
+
+function showTab(t) {
+  closePickers();
+  tab = t;
+  try { localStorage.setItem('amme-tab', t); } catch (e) {}
+  if (statsOpen) showStats(false); else { applyViews(); window.scrollTo(0, 0); }
+}
+document.querySelectorAll('#tabs button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
+
+// Fælles: historik grupperet pr. dag
+function renderGrouped(el, items, tsOf, emptyTxt, headFn, rowFn) {
+  el.innerHTML = '';
+  if (!items.length) { el.innerHTML = `<div class="empty">${emptyTxt}</div>`; return; }
+  let currentDay = null;
+  for (const it of items) {
+    const k = dayKey(tsOf(it));
+    if (k !== currentDay) {
+      currentDay = k;
+      const h = document.createElement('div');
+      h.className = 'day';
+      h.textContent = `${dayLabel(tsOf(it))} · ${headFn(items.filter((x) => dayKey(tsOf(x)) === k))}`;
+      el.appendChild(h);
+    }
+    el.appendChild(rowFn(it));
+  }
+}
+
+// Fælles: rækker med drejehjul i en dialog. rows = { felt: [rækkeId, hjulboksId] }.
+// getObj() giver objektet, hvis felter er tidspunkter. onApply(felt) kaldes, når et tidspunkt ændres.
+function wheelRows(rows, getObj, onApply) {
+  let open = null, apply = null;
+  const close = () => {
+    for (const k in rows) {
+      const box = $(rows[k][1]);
+      box.hidden = true;
+      box.innerHTML = '';
+      $(rows[k][0]).classList.remove('open');
+    }
+    open = null;
+    apply = null;
+  };
+  const toggle = (k) => {
+    const was = open;
+    close();
+    if (was === k) return;
+    open = k;
+    const box = $(rows[k][1]);
+    box.hidden = false;
+    $(rows[k][0]).classList.add('open');
+    const o = getObj();
+    const get = dateWheels(box, o[k], () => apply && apply());
+    apply = () => {
+      const v = get();
+      if (v === o[k]) return;
+      o[k] = v;
+      onApply(k);
+    };
+  };
+  for (const k in rows) $(rows[k][0]).addEventListener('click', () => toggle(k));
+  return { close, flush: () => { if (apply) apply(); } };
+}
+
+// ---------- Ble ----------
+// diapers = [{ id, ts, kind: 'tis'|'lort' }], nyeste først
+let flashTimer = null;
+function logDiaper(kind, btn) {
+  const now = Date.now();
+  state.diapers.push({ id: now.toString(36), ts: now, kind });
+  state.diapers.sort((x, y) => y.ts - x.ts);
+  persist();
+  render();
+  btn.classList.add('hit');
+  setTimeout(() => btn.classList.remove('hit'), 350);
+  $('diaperFlash').textContent = `${kind === 'tis' ? 'Tis' : 'Lort'} gemt kl. ${fmtTime(now)}`;
+  clearTimeout(flashTimer);
+  flashTimer = setTimeout(() => { $('diaperFlash').textContent = ''; }, 4000);
+}
+document.querySelectorAll('.diaper-btns .circle').forEach((b) => b.addEventListener('click', () => logDiaper(b.dataset.kind, b)));
+
+function renderDiapers() {
+  renderGrouped($('diaperList'), state.diapers, (d) => d.ts, 'Ingen bleer endnu.',
+    (list) => {
+      const tis = list.filter((d) => d.kind === 'tis').length, lort = list.length - tis;
+      const parts = [`${list.length} ${list.length === 1 ? 'ble' : 'bleer'}`];
+      if (tis) parts.push(`${tis} tis`);
+      if (lort) parts.push(`${lort} lort`);
+      return parts.join(' · ');
+    },
+    (d) => {
+      const row = document.createElement('div');
+      row.className = 'entry';
+      row.innerHTML = `<span class="time">${fmtTime(d.ts)}</span><span class="kind"><b class="${d.kind}"></b>${d.kind === 'tis' ? 'Tis' : 'Lort'}</span>`;
+      row.addEventListener('click', () => openDiaperEdit(d.id));
+      return row;
+    });
+}
+
+// dp = { id, ts, kind }
+let dp = null;
+const dpWheels = wheelRows({ ts: ['dpTimeRow', 'dpTimeWheels'] }, () => dp, () => updateDp());
+function updateDp() {
+  $('dpTimeTxt').textContent = fmtDT(dp.ts);
+  document.querySelectorAll('#dpKind button').forEach((b) => b.classList.toggle('on', b.dataset.kind === dp.kind));
+}
+function openDiaperEdit(id) {
+  const d = state.diapers.find((x) => x.id === id);
+  if (!d) return;
+  dp = { id, ts: d.ts, kind: d.kind };
+  dpWheels.close();
+  updateDp();
+  $('diaperDlg').returnValue = '';
+  $('diaperDlg').showModal();
+}
+document.querySelectorAll('#dpKind button').forEach((b) => b.addEventListener('click', () => { dp.kind = b.dataset.kind; updateDp(); }));
+$('dpDelete').addEventListener('click', () => {
+  if (!confirm(`Slet ble kl. ${fmtTime(dp.ts)}?`)) return;
+  state.diapers = state.diapers.filter((x) => x.id !== dp.id);
+  persist();
+  render();
+  $('diaperDlg').close('deleted');
+});
+$('diaperDlg').querySelector('form').addEventListener('submit', (e) => {
+  if (!e.submitter || e.submitter.value !== 'save' || !dp) return;
+  dpWheels.flush();
+  const d = state.diapers.find((x) => x.id === dp.id);
+  if (!d) return;
+  d.ts = dp.ts;
+  d.kind = dp.kind;
+  state.diapers.sort((x, y) => y.ts - x.ts);
+  persist();
+  render();
+});
+
+// ---------- Søvn ----------
+// sleeps = [{ id, start, end }], nyeste først. sleepActive = null | { start }
+function toggleSleep() {
+  const now = Date.now();
+  const a = state.sleepActive;
+  if (!a) {
+    state.sleepActive = { start: now };
+  } else {
+    closePickers();
+    if (now > a.start) {
+      state.sleeps.push({ id: now.toString(36), start: a.start, end: now });
+      state.sleeps.sort((x, y) => y.start - x.start);
+    }
+    state.sleepActive = null;
+  }
+  persist();
+  render();
+}
+
+function cancelSleep() {
+  if (!confirm('Annullér denne søvn uden at gemme?')) return;
+  closePickers();
+  state.sleepActive = null;
+  persist();
+  render();
+}
+
+let sleepPick = null;
+function openSleepPicker() {
+  const a = state.sleepActive;
+  if (!a || sleepPick) return closeSleepPicker();
+  $('sleepStartPanel').hidden = false;
+  sleepPick = { get: dateWheels($('sleepStartWheels'), a.start) };
+  $('sleepStartDone').hidden = false;
+  $('sleepStart').hidden = true;
+}
+function closeSleepPicker(apply) {
+  if (sleepPick && apply && state.sleepActive) {
+    state.sleepActive.start = Math.min(sleepPick.get(), Date.now());
+    persist();
+  }
+  sleepPick = null;
+  $('sleepStartPanel').hidden = true;
+  $('sleepStartDone').hidden = true;
+  $('sleepStart').hidden = false;
+  renderLive();
+}
+
+function renderSleepLive(now) {
+  const a = state.sleepActive;
+  $('sleepClock').innerHTML = fmtClockH(a ? Math.max(0, now - a.start) : 0);
+  $('sleepBtn').textContent = a ? 'Vågnet' : 'Start søvn';
+  document.querySelector('.sleep-top').classList.toggle('running', !!a);
+  $('sleepLabel').textContent = a ? 'Sover nu' : 'Vågen';
+  $('sleepBar').hidden = !a;
+  if (a) $('sleepStart').textContent = fmtDT(a.start);
+  const last = state.sleeps[0];
+  $('sleepSince').textContent = !a && last ? `Vågnede for ${fmtAgo(now - last.end)} siden` : '';
+}
+
+function renderSleeps() {
+  renderGrouped($('sleepList'), state.sleeps, (s) => s.start, 'Ingen lure endnu.',
+    (list) => `${list.length} ${list.length === 1 ? 'lur' : 'lure'} · ${fmtHM(list.reduce((t, s) => t + (s.end - s.start) / 1000, 0))}`,
+    (s) => {
+      const row = document.createElement('div');
+      row.className = 'entry';
+      row.innerHTML = `<span class="time">${fmtTime(s.start)}<span class="to">–${fmtTime(s.end)}</span></span><span class="total">${fmtHM((s.end - s.start) / 1000)}</span>`;
+      row.addEventListener('click', () => openSleepEdit(s.id));
+      return row;
+    });
+}
+
+// sl = { id (null = ny), start, end }
+let sl = null;
+const slWheels = wheelRows({ start: ['slStartRow', 'slStartWheels'], end: ['slEndRow', 'slEndWheels'] }, () => sl, () => updateSl());
+function updateSl() {
+  $('slStartTxt').textContent = fmtDT(sl.start);
+  $('slEndTxt').textContent = fmtDT(sl.end);
+  const bad = !(sl.end > sl.start);
+  $('slInfo').textContent = bad ? 'Slut skal være efter start.' : `Sov i ${fmtHM((sl.end - sl.start) / 1000)}`;
+  $('slInfo').style.color = bad ? 'var(--danger)' : '';
+}
+function openSleepEdit(id) {
+  if (id) {
+    const s = state.sleeps.find((x) => x.id === id);
+    if (!s) return;
+    sl = { id, start: s.start, end: s.end };
+  } else {
+    const now = new Date(); now.setSeconds(0, 0);
+    sl = { id: null, start: now.getTime() - 3600e3, end: now.getTime() };
+  }
+  $('slTitle').textContent = id ? 'Redigér søvn' : 'Tilføj søvn';
+  $('slDelete').hidden = !id;
+  slWheels.close();
+  updateSl();
+  $('sleepDlg').returnValue = '';
+  $('sleepDlg').showModal();
+}
+$('slDelete').addEventListener('click', () => {
+  if (!confirm(`Slet søvn kl. ${fmtTime(sl.start)}–${fmtTime(sl.end)}?`)) return;
+  state.sleeps = state.sleeps.filter((x) => x.id !== sl.id);
+  persist();
+  render();
+  $('sleepDlg').close('deleted');
+});
+$('sleepDlg').querySelector('form').addEventListener('submit', (e) => {
+  if (!e.submitter || e.submitter.value !== 'save' || !sl) return;
+  slWheels.flush();
+  if (!(sl.end > sl.start)) { alert('Søvnen blev ikke gemt: slut skal være efter start.'); return; }
+  if (sl.id) {
+    const s = state.sleeps.find((x) => x.id === sl.id);
+    if (!s) return;
+    s.start = sl.start;
+    s.end = sl.end;
+  } else {
+    state.sleeps.push({ id: Date.now().toString(36), start: sl.start, end: sl.end });
+  }
+  state.sleeps.sort((x, y) => y.start - x.start);
+  persist();
+  render();
+});
+
+$('sleepBtn').addEventListener('click', toggleSleep);
+$('sleepCancel').addEventListener('click', cancelSleep);
+$('sleepAdd').addEventListener('click', () => openSleepEdit(null));
+$('sleepStartRow').addEventListener('click', (e) => { if (e.target.id !== 'sleepStartDone') openSleepPicker(); });
+$('sleepStartDone').addEventListener('click', () => closeSleepPicker(true));
 
 // ---------- Indstillinger + backup ----------
 function openSettings() {
@@ -520,11 +809,17 @@ $('importFile').addEventListener('change', async (e) => {
   if (!f) return;
   try {
     const d = JSON.parse(await f.text());
-    if (!Array.isArray(d.sessions)) throw new Error('format');
-    if (!confirm(`Importér ${d.sessions.length} amninger? De lægges sammen med dem, der allerede er her.`)) return;
-    const ids = new Set(state.sessions.map((s) => s.id));
-    for (const s of d.sessions) if (!ids.has(s.id)) state.sessions.push(s);
+    const keys = ['sessions', 'diapers', 'sleeps'].filter((k) => Array.isArray(d[k]));
+    if (!keys.length) throw new Error('format');
+    const cnt = (k) => (Array.isArray(d[k]) ? d[k].length : 0);
+    if (!confirm(`Importér ${cnt('sessions')} amninger, ${cnt('diapers')} bleer og ${cnt('sleeps')} lure? De lægges sammen med dem, der allerede er her.`)) return;
+    for (const k of keys) {
+      const ids = new Set(state[k].map((s) => s.id));
+      for (const s of d[k]) if (!ids.has(s.id)) state[k].push(s);
+    }
     state.sessions.sort((x, y) => y.start - x.start);
+    state.diapers.sort((x, y) => y.ts - x.ts);
+    state.sleeps.sort((x, y) => y.start - x.start);
     if (!state.name && d.name) state.name = d.name;
     persist();
     render();
@@ -556,6 +851,7 @@ $('installClose').addEventListener('click', () => {
 // Første opstart: spørg om barnets navn
 if (!state.name && !state.sessions.length) setTimeout(openSettings, 300);
 
+applyViews();
 render();
 setInterval(renderLive, 500);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) { state = load(); render(); } });
