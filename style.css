@@ -7,8 +7,13 @@
   --bg: #ffffff;
   --cream: #fdf9f4;
   --danger: #d9673a;
+  --green: #3f9a5b;
+  --green-soft: #e3f3e7;
+  --red: #c9552a;
+  --red-soft: #fbe5dc;
   --diaper: #efe6d2;
   --sleep: #bfe0ee;
+  --ddrop: #cfe8d4;
   --head: var(--yellow);
   --tabs-h: 58px;
   --serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
@@ -75,6 +80,7 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + var(--tabs-h) + 24px);
 main[hidden] { display: none; }
 body.tab-diaper { --head: var(--diaper); }
 body.tab-sleep { --head: var(--sleep); }
+body.tab-ddrop { --head: var(--ddrop); }
 body:not(.tab-feed) #statsBtn { visibility: hidden; }
 
 .timers {
@@ -197,6 +203,47 @@ body:not(.tab-feed) #statsBtn { visibility: hidden; }
 .row span:first-child { font-family: var(--serif); font-size: 21px; }
 .actions { display: flex; gap: 12px; padding: 16px 20px; }
 .actions .pill { flex: 1; min-width: 0; }
+
+/* ---------- D-dråber ---------- */
+.ddrop-top { display: flex; justify-content: center; padding: 28px 16px 4px; }
+.circle#ddropBtn {
+  width: 160px;
+  height: 160px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  background: var(--red-soft);
+  border-color: var(--red);
+  color: var(--red);
+  font-size: 26px;
+  transition: background .2s, color .2s;
+}
+.circle#ddropBtn small { font-size: 15px; font-weight: 500; }
+.circle#ddropBtn.given { background: var(--green); border-color: var(--green); color: #fff; font-size: 44px; }
+.circle#ddropBtn:active { transform: scale(.97); }
+.ddrop-cal { padding: 4px 16px 0; }
+.cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.cal-head span { font-weight: 600; font-size: 16px; }
+.cal-nav { border: 0; background: none; color: var(--ink); font-size: 28px; line-height: 1; padding: 2px 14px; }
+.cal-nav:disabled { opacity: .25; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal .wd { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 2px; }
+.cal button {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 50%;
+  font: 600 15px var(--sans);
+  color: var(--ink);
+  background: #f3f3f5;
+  padding: 0;
+}
+.cal button.g { background: var(--green); color: #fff; }
+.cal button.r { background: var(--red-soft); color: var(--red); }
+.cal button.n { background: #f3f3f5; color: var(--muted); }
+.cal button.f { background: none; color: #c8ccd4; }
+.cal button.today { box-shadow: 0 0 0 2px var(--ink); }
 
 .since {
   text-align: center;

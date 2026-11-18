@@ -109,10 +109,22 @@
     </section>
   </main>
 
+  <main id="ddropView" class="tab-view" hidden>
+    <section class="ddrop-top">
+      <button type="button" class="circle ddrop-btn" id="ddropBtn">D-dråber<small>tryk når givet</small></button>
+    </section>
+    <section class="since" id="ddropStatus"></section>
+    <section class="history">
+      <h2>Kalender</h2>
+      <div class="ddrop-cal" id="ddropCal"></div>
+    </section>
+  </main>
+
   <nav class="tabs" id="tabs">
     <button data-tab="feed"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3c3 4 6 7.5 6 11a6 6 0 0 1-12 0c0-3.5 3-7 6-11z"/></svg>Amning</button>
     <button data-tab="diaper"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18v3a9 9 0 0 1-18 0zM8 13.5c1.2 2.5 6.8 2.5 8 0"/></svg>Ble</button>
     <button data-tab="sleep"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 15.5A8 8 0 0 1 8.5 5a8 8 0 1 0 10.5 10.5z"/></svg>Søvn</button>
+    <button data-tab="ddrop"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2.5v2.5M12 19v2.5M2.5 12H5M19 12h2.5M5.3 5.3l1.8 1.8M16.9 16.9l1.8 1.8M5.3 18.7l1.8-1.8M16.9 7.1l1.8-1.8"/></svg>D-dråber</button>
   </nav>
 
   <dialog id="settings">

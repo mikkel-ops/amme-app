@@ -12,10 +12,12 @@ function load() {
       if (!Array.isArray(s.diapers)) s.diapers = [];
       if (!Array.isArray(s.sleeps)) s.sleeps = [];
       if (s.sleepActive === undefined) s.sleepActive = null;
+      // Migrering: D-dråber pr. dag ('YYYY-MM-DD' -> ms timestamp)
+      if (!s.ddrops || typeof s.ddrops !== 'object') s.ddrops = {};
       return s;
     }
   } catch (e) {}
-  return { name: '', lastSide: null, active: null, sessions: [], diapers: [], sleeps: [], sleepActive: null };
+  return { name: '', lastSide: null, active: null, sessions: [], diapers: [], sleeps: [], sleepActive: null, ddrops: {} };
 }
 let state = load();
 function persist() {
@@ -40,6 +42,8 @@ const fmtClockH = (ms) => {
 const fmtShort = (sec) => `${Math.floor(sec / 60)}:${pad(sec % 60)}`;
 const fmtTime = (ts) => { const d = new Date(ts); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const dayKey = (ts) => new Date(ts).toDateString();
+// Lokal dato som 'YYYY-MM-DD' (ikke toISOString, som giver UTC)
+const isoDay = (ts) => { const d = new Date(ts); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`; };
 function dayLabel(ts) {
   const d = new Date(ts), today = new Date();
   const yest = new Date(); yest.setDate(today.getDate() - 1);
@@ -327,6 +331,7 @@ function renderLive() {
   // Seneste sluttid – ikke nødvendigvis sessions[0], som er sorteret efter start
   const lastEnd = state.sessions.reduce((m, s) => Math.max(m, endOf(s)), 0);
   $('since').textContent = !a && lastEnd ? `Sidste amning sluttede for ${fmtAgo(Math.max(0, now - lastEnd))} siden` : '';
+  if (isoDay(now) !== ddropDay) renderDdrop();
   renderSleepLive(now);
   const lastD = state.diapers[0];
   $('diaperSince').textContent = lastD ? `Siden sidste ble: ${fmtAgo(now - lastD.ts)} · ${lastD.kind}` : '';
@@ -362,12 +367,94 @@ function renderHistory() {
   }
 }
 
+// ---------- D-dråber ----------
+let ddropDay = null; // dagen fanen sidst blev tegnet for (så den skifter ved midnat)
+const firstOfMonth = (d) => new Date(d.getFullYear(), d.getMonth(), 1);
+let calMonth = firstOfMonth(new Date());
+
+function toggleDdrop(day, ts) {
+  if (state.ddrops[day]) delete state.ddrops[day];
+  else state.ddrops[day] = ts;
+  persist();
+}
+
+function renderDdrop() {
+  const now = Date.now();
+  if (ddropDay && isoDay(now) !== ddropDay) calMonth = firstOfMonth(new Date(now));
+  ddropDay = isoDay(now);
+  const ts = state.ddrops[ddropDay];
+  const btn = $('ddropBtn');
+  btn.classList.toggle('given', !!ts);
+  btn.innerHTML = ts ? '✓<small>Givet</small>' : 'D-dråber<small>tryk når givet</small>';
+  $('ddropStatus').textContent = ts ? `Givet i dag kl. ${fmtTime(ts)}` : 'Ikke givet i dag endnu';
+  $('ddropCal').innerHTML = calendarHTML(calMonth);
+}
+
+// Kalender: grøn = givet, rød = ikke givet (fra første registrering), grå = før/fremtid
+function calendarHTML(m) {
+  const today = isoDay(Date.now());
+  const first = Object.keys(state.ddrops).sort()[0] || null;
+  const y = m.getFullYear(), mo = m.getMonth();
+  const daysIn = new Date(y, mo + 1, 0).getDate();
+  const lead = (new Date(y, mo, 1).getDay() + 6) % 7; // mandag først
+  const isCurrent = isoDay(m.getTime()).slice(0, 7) === today.slice(0, 7);
+  let given = 0, counted = 0;
+  let cells = '<span></span>'.repeat(lead);
+  for (let d = 1; d <= daysIn; d++) {
+    const key = `${y}-${pad(mo + 1)}-${pad(d)}`;
+    let cls;
+    if (key > today) cls = 'f';
+    else if (state.ddrops[key]) cls = 'g';
+    else if (first && key >= first) cls = 'r';
+    else cls = 'n';
+    if (cls === 'g' || cls === 'r') counted++;
+    if (cls === 'g') given++;
+    cells += `<button type="button" class="${cls}${key === today ? ' today' : ''}" data-day="${key}"${cls === 'f' ? ' disabled' : ''}>${d}</button>`;
+  }
+  const title = m.toLocaleDateString('da-DK', { month: 'long', year: 'numeric' });
+  const sum = counted ? `Givet ${given} af ${counted} dage` : 'Tryk på en dag for at rette den';
+  return `
+    <div class="cal-head">
+      <button type="button" class="cal-nav" data-nav="-1" aria-label="Forrige måned">‹</button>
+      <span>${title}</span>
+      <button type="button" class="cal-nav" data-nav="1" aria-label="Næste måned"${isCurrent ? ' disabled' : ''}>›</button>
+    </div>
+    <div class="cal">
+      ${['ma', 'ti', 'on', 'to', 'fr', 'lø', 'sø'].map((w) => `<span class="wd">${w}</span>`).join('')}
+      ${cells}
+    </div>
+    <div class="chart-cap">${sum}</div>`;
+}
+
+$('ddropBtn').addEventListener('click', () => {
+  const now = Date.now(), day = isoDay(now);
+  if (state.ddrops[day] && !confirm('Fjern markering for i dag?')) return;
+  toggleDdrop(day, now);
+  renderDdrop();
+});
+// Delegering, da kalenderen tegnes om ved hver ændring
+$('ddropCal').addEventListener('click', (e) => {
+  const nav = e.target.closest('.cal-nav');
+  if (nav) {
+    calMonth = new Date(calMonth.getFullYear(), calMonth.getMonth() + +nav.dataset.nav, 1);
+    renderDdrop();
+    return;
+  }
+  const b = e.target.closest('.cal button[data-day]');
+  if (!b || b.disabled) return;
+  const day = b.dataset.day, [y, mo, d] = day.split('-').map(Number);
+  const ts = day === isoDay(Date.now()) ? Date.now() : new Date(y, mo - 1, d, 12).getTime();
+  toggleDdrop(day, ts);
+  renderDdrop();
+});
+
 function renderTitle() {
   $('title').textContent = statsOpen ? 'Statistik' : (state.name || 'Amning');
 }
 
 function render() {
   renderTitle();
+  renderDdrop();
   renderLive();
   renderHistory();
   renderDiapers();
@@ -505,8 +592,8 @@ document.querySelectorAll('#statsView .seg button').forEach((b) => b.addEventLis
 }));
 
 // ---------- Faner ----------
-const TAB_COLOR = { feed: '#f4cd5f', diaper: '#efe6d2', sleep: '#bfe0ee' };
-const TAB_VIEW = { feed: 'mainView', diaper: 'diaperView', sleep: 'sleepView' };
+const TAB_COLOR = { feed: '#f4cd5f', diaper: '#efe6d2', sleep: '#bfe0ee', ddrop: '#cfe8d4' };
+const TAB_VIEW = { feed: 'mainView', diaper: 'diaperView', sleep: 'sleepView', ddrop: 'ddropView' };
 let tab = 'feed';
 try { const t = localStorage.getItem('amme-tab'); if (TAB_VIEW[t]) tab = t; } catch (e) {}
 
@@ -814,9 +901,12 @@ $('importFile').addEventListener('change', async (e) => {
   try {
     const d = JSON.parse(await f.text());
     const keys = ['sessions', 'diapers', 'sleeps'].filter((k) => Array.isArray(d[k]));
-    if (!keys.length) throw new Error('format');
+    const dd = d.ddrops && typeof d.ddrops === 'object' ? d.ddrops : {};
+    const nDd = Object.keys(dd).length;
+    if (!keys.length && !nDd) throw new Error('format');
     const cnt = (k) => (Array.isArray(d[k]) ? d[k].length : 0);
-    if (!confirm(`Importér ${cnt('sessions')} amninger, ${cnt('diapers')} bleer og ${cnt('sleeps')} lure? De lægges sammen med dem, der allerede er her.`)) return;
+    if (!confirm(`Importér ${cnt('sessions')} amninger, ${cnt('diapers')} bleer, ${cnt('sleeps')} lure${nDd ? ` og ${nDd} dage med D-dråber` : ''}? De lægges sammen med dem, der allerede er her.`)) return;
+    for (const k in dd) if (/^\d{4}-\d\d-\d\d$/.test(k) && !state.ddrops[k]) state.ddrops[k] = dd[k];
     for (const k of keys) {
       const ids = new Set(state[k].map((s) => s.id));
       for (const s of d[k]) if (!ids.has(s.id)) state[k].push(s);

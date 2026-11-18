@@ -16,7 +16,7 @@ Simpel amme-tracker som PWA til iPhone. Man starter og stopper en timer for vens
 ## Filer
 | Fil | Indhold |
 |---|---|
-| `index.html` | Al markup: header, faneblade (`#tabs`), amning (`#mainView`), ble (`#diaperView`), søvn (`#sleepView`), statistik-visning (`#statsView`) og dialoger (`#settings`, `#editDlg`, `#diaperDlg`, `#sleepDlg`) |
+| `index.html` | Al markup: header, faneblade (`#tabs`), amning (`#mainView`), ble (`#diaperView`), søvn (`#sleepView`), D-dråber (`#ddropView`), statistik-visning (`#statsView`) og dialoger (`#settings`, `#editDlg`, `#diaperDlg`, `#sleepDlg`) |
 | `app.js` | Al logik. Den er opdelt i sektioner med `// ---------- X ----------`: Lagring, Hjælpere, Timer-logik, Drejehjul, Redigering, Visning, Statistik, Faner, Ble, Søvn, Indstillinger + backup, Opstart |
 | `style.css` | Farver som CSS-variabler på `:root` (gul `--yellow`, mørkeblå `--ink`), serif-overskrifter (`ui-serif`/New York) |
 | `sw.js` | Service worker. Den henter fra netværket først og bruger cachen som fallback, så appen virker offline |
@@ -38,13 +38,14 @@ Simpel amme-tracker som PWA til iPhone. Man starter og stopper en timer for vens
   sessions: [{ id, start, end, L, R }], // L/R i sekunder; sorteret nyeste først
   diapers: [{ id, ts, kind: 'tis' | 'lort' }],  // nyeste først
   sleeps: [{ id, start, end }],         // ms; nyeste først
-  sleepActive: null | { start }         // igangværende lur
+  sleepActive: null | { start },        // igangværende lur
+  ddrops: { 'YYYY-MM-DD': ts }          // D-dråber givet den (lokale) dag; mangler nøglen = ikke givet
 }
 ```
 - Den forløbne tid beregnes altid som `acc + (now - since)`. Derfor tæller timeren korrekt, selvom telefonen er låst, eller appen er lukket.
 - `end - start` er **ikke** nødvendigvis lig med `L + R`, fordi der kan være pauser. Brug `endOf(s)`, som falder tilbage til `start + (L+R)` for gamle data uden `end`.
 - Ændrer du formatet, så lav en migrering i `load()`. Brugerne har rigtige data, der ikke må gå tabt.
-- `load()` migrerer gamle data ved at tilføje tomme `diapers`/`sleeps` og `sleepActive: null`.
+- `load()` migrerer gamle data ved at tilføje tomme `diapers`/`sleeps` og `sleepActive: null` samt et tomt `ddrops: {}`. Datonøglen laves med `isoDay(ts)` (lokal tid, ikke `toISOString`).
 - `amme-hint-closed` i `localStorage` husker, at installationsbeskeden er lukket, og `amme-tab` husker den valgte fane.
 
 ## Vigtig adfærd
@@ -55,6 +56,7 @@ Simpel amme-tracker som PWA til iPhone. Man starter og stopper en timer for vens
 - **Fokus i dialoger:** Dialog-overskrifter har `autofocus tabindex="-1"`, så iOS ikke åbner tastaturet eller kalenderen, når dialogen åbner.
 - **Skjulte elementer:** `[hidden]` bliver overstyret af `display:flex`. Tilføj derfor en `X[hidden]{display:none}`-regel, når du giver en klasse `display`.
 - **Statistik:** visningen 7 eller 30 dage har nøgletal og et søjlediagram i inline SVG med én serie i mørkeblå. Gennemsnit pr. dag regnes fra den første dag med data i perioden.
+- **D-dråber (fanen `ddrop`, `#ddropView`):** En stor rund knap (`#ddropBtn`) markerer i dag med klokkeslæt. Den er rød, indtil der er givet, og derefter grøn. Man skal bekræfte, før man fjerner en markering. Under knappen ligger en månedskalender (`calendarHTML`), hvor et tryk på en dag skifter dens status. Dage før den første registrering er grå, og efter den er dage uden markering røde. `renderLive` tegner fanen om ved midnat. Import fletter `ddrops` efter dato.
 - **Faner:** Amning, Ble og Søvn ligger i en fast bundbar. `applyViews()` viser den rigtige visning, sætter `body.tab-X` (headerfarven via `--head`) og `theme-color`. Statistik-knappen vises kun på Amning, og statistikken dækker kun amninger.
 - **Ble:** ét tryk på Tis eller Lort logger med det samme. Tryk på en række i historikken for at rette tid og type eller slette.
 - **Søvn:** "Start søvn" sætter `sleepActive`, og "Vågnet" gemmer luren. "+ Tilføj søvn" tilføjer en lur bagefter. `wheelRows()` er en fælles hjælper til dialog-rækker med drejehjul (bruges af `#diaperDlg` og `#sleepDlg`).
