@@ -1,0 +1,493 @@
+<!doctype html>
+<html lang="da">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Amme-app tests</title>
+<style>
+  body { font: 14px/1.4 ui-monospace, Menlo, monospace; margin: 16px; background: #fff; color: #111; }
+  iframe { width: 390px; height: 700px; border: 1px solid #ccc; float: right; margin-left: 16px; }
+  .pass { color: #187a2f; } .fail { color: #b00020; font-weight: bold; }
+  pre { white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div id="frameBox"></div>
+<h1 id="summary">Kører…</h1>
+<pre id="out"></pre>
+<script>
+'use strict';
+// Tests af amme-appen. Appen indlæses i en 390px iframe (iPhone-bredde), og testene
+// kalder appens egne funktioner og klikker på knapperne.
+//
+// Kør: bash tests/run.sh  (eller åbn http://localhost:PORT/tests/ i en browser)
+//
+// Testene skriver i localStorage på samme origin som appen. Derfor kører de kun på
+// localhost, og eksisterende data gemmes først og lægges tilbage bagefter.
+
+const LOCAL = ['localhost', '127.0.0.1', '[::1]'].includes(location.hostname);
+const KEYS = ['amme-v1', 'amme-tab', 'amme-hint-closed'];
+const M = 60000, H = 60 * M;
+
+// ---------- Mini-testramme ----------
+const tests = [];
+const test = (name, fn) => tests.push({ name, fn });
+const fmt = (v) => JSON.stringify(v);
+function eq(actual, expected, what = '') {
+  if (fmt(actual) !== fmt(expected)) throw new Error(`${what ? what + ': ' : ''}fik ${fmt(actual)}, forventet ${fmt(expected)}`);
+}
+function ok(cond, what) { if (!cond) throw new Error(what); }
+const tick = (ms = 0) => new Promise((r) => setTimeout(r, ms));
+
+// Starter appen forfra med de givne data. seed = undefined betyder tom localStorage.
+async function boot(seed, { tab, raw } = {}) {
+  for (const k of KEYS) localStorage.removeItem(k);
+  if (raw !== undefined) localStorage.setItem('amme-v1', raw);
+  else if (seed !== undefined) localStorage.setItem('amme-v1', JSON.stringify({ name: 'Test', lastSide: null, active: null, sessions: [], ...seed }));
+  if (tab) localStorage.setItem('amme-tab', tab);
+  const box = document.getElementById('frameBox');
+  box.innerHTML = '';
+  const f = document.createElement('iframe');
+  f.src = '../index.html';
+  const loaded = new Promise((r) => (f.onload = r));
+  box.appendChild(f);
+  await loaded;
+  const w = f.contentWindow;
+  const alerts = [];
+  let confirmAnswer = true;
+  w.alert = (m) => alerts.push(m);
+  w.confirm = (m) => { alerts.push(m); return confirmAnswer; };
+  const realNow = w.Date.now.bind(w.Date);
+  const app = {
+    w, alerts,
+    $: (id) => w.document.getElementById(id),
+    q: (sel) => w.document.querySelector(sel),
+    text: (id) => w.document.getElementById(id).textContent,
+    state: () => w.eval('state'),
+    stored: () => JSON.parse(localStorage.getItem('amme-v1')),
+    setNow: (t) => { w.Date.now = () => t; },
+    realNow,
+    confirmAnswer: (v) => { confirmAnswer = v; },
+    live: () => w.renderLive(),
+    // Indsender en dialogs formular med dens "save"-knap, ligesom et tryk på Gem
+    submit: (dlgId) => {
+      const form = w.document.querySelector(`#${dlgId} form`);
+      form.requestSubmit(form.querySelector('button[value="save"]'));
+    },
+    // Lægger en fil i backup-importen og venter på, at den er læst
+    importJSON: async (obj) => {
+      const input = w.document.getElementById('importFile');
+      const dt = new w.DataTransfer();
+      dt.items.add(new w.File([typeof obj === 'string' ? obj : JSON.stringify(obj)], 'backup.json', { type: 'application/json' }));
+      input.files = dt.files;
+      input.dispatchEvent(new w.Event('change'));
+      for (let i = 0; i < 50 && !alerts.some((a) => /importeret|kunne ikke/i.test(a)); i++) await tick(10);
+    },
+  };
+  return app;
+}
+
+const NOW = Date.now();
+const sess = (id, startAgo, endAgo, L = 300, R = 300) =>
+  ({ id, start: NOW - startAgo, ...(endAgo == null ? {} : { end: NOW - endAgo }), L, R });
+
+// ---------- Lagring og migrering ----------
+test('Tom localStorage giver en tom app med alle lister', async () => {
+  const a = await boot();
+  const s = a.state();
+  eq(s.sessions, []); eq(s.diapers, []); eq(s.sleeps, []); eq(s.sleepActive, null); eq(s.active, null);
+});
+
+test('Gammelt format (kun amninger) migreres uden datatab', async () => {
+  const old = { name: 'Frida', lastSide: 'R', active: null, sessions: [sess('a', 2 * H, H)] };
+  const a = await boot(undefined, { raw: JSON.stringify(old) });
+  const s = a.state();
+  eq(s.sessions, old.sessions, 'amninger');
+  eq(s.name, 'Frida'); eq(s.lastSide, 'R');
+  eq(s.diapers, []); eq(s.sleeps, []); eq(s.sleepActive, null);
+});
+
+test('Ødelagt JSON i localStorage giver en tom app i stedet for at gå ned', async () => {
+  const a = await boot(undefined, { raw: '{ikke json' });
+  eq(a.state().sessions, []);
+});
+
+test('Barnets navn vises i headeren', async () => {
+  const a = await boot({ name: 'Frida' });
+  ok(a.w.document.body.textContent.includes('Frida'), 'navnet blev ikke fundet på siden');
+});
+
+// ---------- Amning: timer ----------
+test('Start venstre starter timeren, og knappen hedder "Stop venstre"', async () => {
+  const a = await boot({});
+  a.setNow(NOW);
+  a.$('btnL').click();
+  const act = a.state().active;
+  eq(act.running, 'L'); eq(act.start, NOW);
+  eq(a.text('btnL'), 'Stop venstre'); eq(a.text('btnR'), 'Start højre');
+  eq(a.stored().active.running, 'L', 'gemt i localStorage');
+});
+
+test('Skift til højre sætter venstre på pause og gemmer dens tid', async () => {
+  const a = await boot({});
+  a.setNow(NOW); a.$('btnL').click();
+  a.setNow(NOW + 5 * M); a.$('btnR').click();
+  const act = a.state().active;
+  eq(act.running, 'R'); eq(act.acc.L, 5 * M); eq(act.since, NOW + 5 * M);
+  eq(a.w.elapsed('R', NOW + 8 * M), 3 * M, 'højre efter 3 min');
+});
+
+test('Stop pauser uden at gemme amningen', async () => {
+  const a = await boot({});
+  a.setNow(NOW); a.$('btnL').click();
+  a.setNow(NOW + 4 * M); a.$('btnL').click();
+  eq(a.state().active.running, null); eq(a.state().active.acc.L, 4 * M); eq(a.state().sessions.length, 0);
+});
+
+test('Gem logger amningen med start, slut og sekunder pr. side', async () => {
+  const a = await boot({});
+  a.setNow(NOW); a.$('btnL').click();
+  a.setNow(NOW + 5 * M); a.$('btnR').click();
+  a.setNow(NOW + 12 * M); a.$('saveBtn').click();
+  const s = a.state();
+  eq(s.active, null);
+  eq(s.sessions.length, 1);
+  const x = s.sessions[0];
+  eq([x.start, x.end, x.L, x.R], [NOW, NOW + 12 * M, 300, 420]);
+  eq(s.lastSide, 'R');
+  eq(a.stored().sessions.length, 1, 'gemt i localStorage');
+});
+
+test('Gem med 0 sekunder logger ikke noget', async () => {
+  const a = await boot({});
+  a.setNow(NOW); a.$('btnL').click(); a.$('saveBtn').click();
+  eq(a.state().sessions.length, 0); eq(a.state().active, null);
+});
+
+test('Annullér kasserer amningen', async () => {
+  const a = await boot({});
+  a.setNow(NOW); a.$('btnL').click();
+  a.setNow(NOW + 3 * M); a.$('cancelBtn').click();
+  eq(a.state().active, null); eq(a.state().sessions.length, 0);
+});
+
+test('Annullér gør intet, hvis man siger nej', async () => {
+  const a = await boot({});
+  a.setNow(NOW); a.$('btnL').click();
+  a.confirmAnswer(false); a.$('cancelBtn').click();
+  ok(a.state().active, 'amningen forsvandt');
+});
+
+test('Timeren tæller videre, når appen genåbnes (låst telefon)', async () => {
+  const active = { start: NOW - 10 * M, acc: { L: 4 * M, R: 0 }, running: 'R', since: NOW - 6 * M };
+  const a = await boot({ active });
+  a.setNow(NOW);
+  eq(a.w.elapsed('L'), 4 * M); eq(a.w.elapsed('R'), 6 * M);
+  eq(a.text('btnR'), 'Stop højre');
+});
+
+// ---------- Siden sidste amning ----------
+const SINCE = (t) => `Sidste amning sluttede for ${t} siden`;
+async function sinceFor(sessions) {
+  const a = await boot({ sessions });
+  a.setNow(NOW); a.live();
+  return a.text('since');
+}
+test('Siden sidste amning måles fra sluttid, ikke start', async () => {
+  eq(await sinceFor([sess('a', 90 * M, 30 * M)]), SINCE('30m'));
+});
+test('Siden sidste amning viser timer og minutter', async () => {
+  eq(await sinceFor([sess('a', 3 * H, 2 * H + 5 * M)]), SINCE('2t 5m'));
+});
+test('Siden sidste amning: seneste sluttid vinder ved overlap', async () => {
+  eq(await sinceFor([sess('b', 100 * M, 90 * M), sess('a', 120 * M, 60 * M)]), SINCE('1t 0m'));
+});
+test('Siden sidste amning: sluttid i fremtiden giver 0m, ikke negativ', async () => {
+  eq(await sinceFor([sess('a', 30 * M, -10 * M)]), SINCE('0m'));
+});
+test('Siden sidste amning: gammelt format uden end bruger start + L + R', async () => {
+  eq(await sinceFor([sess('a', 60 * M, null, 600, 600)]), SINCE('40m'));
+});
+test('Siden sidste amning er tom uden amninger og under en amning', async () => {
+  eq(await sinceFor([]), '');
+  const a = await boot({ sessions: [sess('a', 90 * M, 30 * M)],
+    active: { start: NOW - 5 * M, acc: { L: 0, R: 0 }, running: 'L', since: NOW - 5 * M } });
+  a.setNow(NOW); a.live();
+  eq(a.text('since'), '');
+});
+
+// ---------- Amning: redigering ----------
+test('Redigering: gyldig sluttid gemmes', async () => {
+  const a = await boot({ sessions: [sess('a', 90 * M, 30 * M)] });
+  a.w.openEdit('a');
+  a.w.eval('ed.apply = null; ed.end = Date.now() - 20 * 60000;');
+  a.submit('editDlg');
+  eq(Math.round((a.realNow() - a.state().sessions[0].end) / M), 20);
+  eq(a.alerts.length, 0, 'antal beskeder');
+});
+test('Redigering: sluttid i fremtiden afvises', async () => {
+  const a = await boot({ sessions: [sess('a', 90 * M, 30 * M)] });
+  a.w.openEdit('a');
+  a.w.eval('ed.apply = null; ed.end = Date.now() + 10 * 60000;');
+  a.submit('editDlg');
+  ok(a.alerts.some((m) => m.includes('fremtiden')), 'ingen besked om fremtiden');
+  eq(a.state().sessions[0].end, NOW - 30 * M);
+});
+test('Redigering: slut før start afvises', async () => {
+  const a = await boot({ sessions: [sess('a', 90 * M, 30 * M)] });
+  a.w.openEdit('a');
+  a.w.eval('ed.apply = null; ed.end = ed.start - 60000;');
+  a.submit('editDlg');
+  ok(a.alerts.some((m) => m.includes('efter start')), 'ingen besked');
+  eq(a.state().sessions[0].end, NOW - 30 * M);
+});
+test('Slet amning fjerner den', async () => {
+  const a = await boot({ sessions: [sess('b', 2 * H, H), sess('a', 4 * H, 3 * H)] });
+  eq(a.w.del('a'), true);
+  eq(a.state().sessions.map((s) => s.id), ['b']);
+});
+
+// ---------- Statistik ----------
+test('Statistik: gns. tid mellem og længste pause regnes fra slut til start', async () => {
+  const a = await boot({ sessions: [sess('c', 2 * H, H + 45 * M), sess('b', 4 * H, 3 * H + 30 * M), sess('a', 6 * H, 5 * H + 30 * M)] });
+  const st = a.w.computeStats(7);
+  eq(st.n, 3); eq(st.avgGap, 90 * M, 'gns. tid mellem');
+  if (new Date(NOW - 6 * H).toDateString() === new Date(NOW).toDateString()) eq(st.today.longest, 90 * M, 'længste pause');
+});
+test('Statistik: overlappende amninger giver pause 0, ikke negativ', async () => {
+  const a = await boot({ sessions: [sess('b', 100 * M, 90 * M), sess('a', 120 * M, 60 * M)] });
+  eq(a.w.computeStats(7).avgGap, 0);
+});
+test('Statistik: amninger ældre end perioden tæller ikke med', async () => {
+  const a = await boot({ sessions: [sess('b', H, 50 * M), sess('a', 10 * 24 * H, 10 * 24 * H - 10 * M)] });
+  eq(a.w.computeStats(7).n, 1);
+  eq(a.w.computeStats(30).n, 2);
+});
+
+// ---------- Faner ----------
+test('Faneskift viser den rigtige visning og sætter headerfarven', async () => {
+  const a = await boot({});
+  eq(a.$('mainView').hidden, false);
+  a.q('#tabs button[data-tab="diaper"]').click();
+  eq([a.$('mainView').hidden, a.$('diaperView').hidden, a.$('sleepView').hidden], [true, false, true]);
+  eq(a.w.document.body.className, 'tab-diaper');
+  eq(a.$('themeColor').getAttribute('content'), '#efe6d2');
+  eq(localStorage.getItem('amme-tab'), 'diaper');
+});
+test('Den valgte fane huskes, når appen genåbnes', async () => {
+  const a = await boot({}, { tab: 'sleep' });
+  eq(a.$('sleepView').hidden, false); eq(a.$('mainView').hidden, true);
+  eq(a.w.document.body.className, 'tab-sleep');
+});
+test('Statistik-knappen vises kun på Amning', async () => {
+  const a = await boot({});
+  eq(a.w.getComputedStyle(a.$('statsBtn')).visibility, 'visible');
+  a.q('#tabs button[data-tab="sleep"]').click();
+  eq(a.w.getComputedStyle(a.$('statsBtn')).visibility, 'hidden');
+});
+
+// ---------- Ble ----------
+test('Tryk på Tis logger en ble med det samme', async () => {
+  const a = await boot({}, { tab: 'diaper' });
+  a.setNow(NOW);
+  a.q('.diaper-btns .circle[data-kind="tis"]').click();
+  eq(a.state().diapers.map((d) => [d.ts, d.kind]), [[NOW, 'tis']]);
+  ok(a.text('diaperFlash').startsWith('Tis gemt kl.'), 'ingen bekræftelse');
+  eq(a.stored().diapers.length, 1, 'gemt i localStorage');
+});
+test('Ble-historikken tæller tis og lort pr. dag', async () => {
+  const a = await boot({}, { tab: 'diaper' });
+  a.setNow(NOW);
+  a.q('.diaper-btns .circle[data-kind="tis"]').click();
+  a.setNow(NOW + 1000);
+  a.q('.diaper-btns .circle[data-kind="lort"]').click();
+  a.setNow(NOW + 2000);
+  a.q('.diaper-btns .circle[data-kind="tis"]').click();
+  const head = a.q('#diaperList .day').textContent;
+  ok(head.endsWith('3 bleer · 2 tis · 1 lort'), `overskrift: ${head}`);
+  eq(a.$('diaperList').querySelectorAll('.entry').length, 3);
+});
+test('Siden sidste ble viser tid og type', async () => {
+  const a = await boot({ diapers: [{ id: 'd', ts: NOW - 25 * M, kind: 'lort' }] }, { tab: 'diaper' });
+  a.setNow(NOW); a.live();
+  eq(a.text('diaperSince'), 'Siden sidste ble: 25m · lort');
+});
+test('Redigér ble: skift type og gem', async () => {
+  const a = await boot({ diapers: [{ id: 'd', ts: NOW - H, kind: 'tis' }] }, { tab: 'diaper' });
+  a.q('#diaperList .entry').click();
+  ok(a.$('diaperDlg').open, 'dialogen åbnede ikke');
+  a.q('#dpKind button[data-kind="lort"]').click();
+  a.submit('diaperDlg');
+  eq(a.state().diapers[0].kind, 'lort');
+  eq(a.state().diapers[0].ts, NOW - H);
+});
+test('Slet ble fjerner den', async () => {
+  const a = await boot({ diapers: [{ id: 'd', ts: NOW - H, kind: 'tis' }] }, { tab: 'diaper' });
+  a.w.openDiaperEdit('d');
+  a.$('dpDelete').click();
+  eq(a.state().diapers, []);
+  eq(a.$('diaperDlg').open, false);
+});
+
+// ---------- Søvn ----------
+test('Start søvn og Vågnet gemmer en lur', async () => {
+  const a = await boot({}, { tab: 'sleep' });
+  a.setNow(NOW); a.$('sleepBtn').click();
+  eq(a.state().sleepActive, { start: NOW });
+  eq(a.text('sleepBtn'), 'Vågnet'); eq(a.text('sleepLabel'), 'Sover nu');
+  a.setNow(NOW + 45 * M); a.$('sleepBtn').click();
+  const s = a.state();
+  eq(s.sleepActive, null);
+  eq(s.sleeps.map((x) => [x.start, x.end]), [[NOW, NOW + 45 * M]]);
+  eq(a.text('sleepBtn'), 'Start søvn');
+  eq(a.stored().sleeps.length, 1, 'gemt i localStorage');
+});
+test('Søvn-timeren tæller videre, når appen genåbnes', async () => {
+  const a = await boot({ sleepActive: { start: NOW - 50 * M } }, { tab: 'sleep' });
+  a.setNow(NOW); a.live();
+  eq(a.text('sleepLabel'), 'Sover nu');
+  ok(a.text('sleepClock').includes('50'), `ur: ${a.text('sleepClock')}`);
+});
+test('Vågnede for … siden måles fra lurens slut', async () => {
+  const a = await boot({ sleeps: [{ id: 's', start: NOW - 2 * H, end: NOW - 20 * M }] }, { tab: 'sleep' });
+  a.setNow(NOW); a.live();
+  eq(a.text('sleepSince'), 'Vågnede for 20m siden');
+});
+test('Annullér søvn kasserer luren', async () => {
+  const a = await boot({ sleepActive: { start: NOW - 10 * M } }, { tab: 'sleep' });
+  a.$('sleepCancel').click();
+  eq(a.state().sleepActive, null); eq(a.state().sleeps, []);
+});
+test('+ Tilføj søvn gemmer en lur på 1 time', async () => {
+  const a = await boot({}, { tab: 'sleep' });
+  a.$('sleepAdd').click();
+  ok(a.$('sleepDlg').open, 'dialogen åbnede ikke');
+  a.submit('sleepDlg');
+  const s = a.state().sleeps;
+  eq(s.length, 1); eq(s[0].end - s[0].start, H);
+});
+test('Redigér søvn: slut før start afvises', async () => {
+  const lur = { id: 's', start: NOW - 2 * H, end: NOW - H };
+  const a = await boot({ sleeps: [lur] }, { tab: 'sleep' });
+  a.q('#sleepList .entry').click();
+  a.w.eval('sl.end = sl.start - 60000;');
+  a.submit('sleepDlg');
+  ok(a.alerts.some((m) => m.includes('efter start')), 'ingen besked');
+  eq(a.state().sleeps[0], lur);
+});
+test('Redigér søvn: ny sluttid gemmes', async () => {
+  const a = await boot({ sleeps: [{ id: 's', start: NOW - 2 * H, end: NOW - H }] }, { tab: 'sleep' });
+  a.w.openSleepEdit('s');
+  a.w.eval(`sl.end = ${NOW - 30 * M};`);
+  a.submit('sleepDlg');
+  eq(a.state().sleeps[0].end, NOW - 30 * M);
+  eq(a.state().sleeps[0].start, NOW - 2 * H, 'start står stille');
+});
+test('Slet søvn fjerner luren', async () => {
+  const a = await boot({ sleeps: [{ id: 's', start: NOW - 2 * H, end: NOW - H }] }, { tab: 'sleep' });
+  a.w.openSleepEdit('s');
+  a.$('slDelete').click();
+  eq(a.state().sleeps, []);
+});
+
+// ---------- Backup ----------
+const FULL = {
+  name: 'Frida',
+  sessions: [sess('a', 3 * H, 2 * H + 40 * M)],
+  diapers: [{ id: 'd', ts: NOW - H, kind: 'lort' }],
+  sleeps: [{ id: 's', start: NOW - 5 * H, end: NOW - 4 * H }],
+};
+test('Eksport indeholder amninger, bleer og søvn', async () => {
+  const a = await boot(FULL);
+  let file = null;
+  a.w.navigator.canShare = undefined;
+  a.w.URL.createObjectURL = (f) => { file = f; return 'blob:test'; };
+  a.w.HTMLAnchorElement.prototype.click = () => {};
+  a.$('exportBtn').click();
+  await tick(10);
+  ok(file, 'ingen fil blev lavet');
+  const d = JSON.parse(await file.text());
+  eq(d.app, 'amme');
+  eq([d.sessions, d.diapers, d.sleeps], [FULL.sessions, FULL.diapers, FULL.sleeps]);
+});
+test('Import i tom app giver præcis de samme data', async () => {
+  const a = await boot({ name: '' });
+  await a.importJSON({ app: 'amme', version: 1, ...FULL });
+  const s = a.state();
+  eq([s.sessions, s.diapers, s.sleeps], [FULL.sessions, FULL.diapers, FULL.sleeps]);
+  eq(s.name, 'Frida', 'navnet tages med, når appen ikke har et');
+  ok(a.alerts.includes('Backup importeret.'), 'ingen bekræftelse');
+});
+test('Import to gange giver ingen dubletter', async () => {
+  const a = await boot({});
+  await a.importJSON(FULL);
+  a.alerts.length = 0;
+  await a.importJSON(FULL);
+  const s = a.state();
+  eq([s.sessions.length, s.diapers.length, s.sleeps.length], [1, 1, 1]);
+});
+test('Import fletter med eksisterende data efter id', async () => {
+  const a = await boot({ sessions: [sess('x', H, 50 * M)] });
+  await a.importJSON(FULL);
+  eq(a.state().sessions.map((s) => s.id), ['x', 'a'], 'sorteret nyeste først');
+  eq(a.state().name, 'Test', 'eksisterende navn bevares');
+});
+test('Gammel backup med kun amninger kan importeres', async () => {
+  const a = await boot({ diapers: [{ id: 'd0', ts: NOW, kind: 'tis' }] });
+  await a.importJSON({ sessions: FULL.sessions });
+  eq(a.state().sessions, FULL.sessions);
+  eq(a.state().diapers.length, 1, 'bleer urørt');
+});
+test('Ugyldig fil afvises med en besked', async () => {
+  const a = await boot({ sessions: [sess('x', H, 50 * M)] });
+  await a.importJSON('{"foo": 1}');
+  ok(a.alerts.some((m) => m.includes('kunne ikke læses')), 'ingen fejlbesked');
+  eq(a.state().sessions.length, 1);
+});
+test('Import afbrydes, hvis man siger nej', async () => {
+  const a = await boot({});
+  a.confirmAnswer(false);
+  await a.importJSON(FULL);
+  await tick(50);
+  eq(a.state().sessions, []);
+});
+
+// ---------- Kørsel ----------
+async function runAll() {
+  const out = document.getElementById('out');
+  const summary = document.getElementById('summary');
+  if (!LOCAL) {
+    summary.textContent = 'Testene kører kun på localhost, så de ikke rører rigtige data.';
+    document.title = 'SKIPPED';
+    return;
+  }
+  // Gem eksisterende data, så de kan lægges tilbage
+  const backup = {};
+  for (const k of KEYS) backup[k] = localStorage.getItem(k);
+  const lines = [];
+  let fails = 0;
+  try {
+    for (const t of tests) {
+      try {
+        await t.fn();
+        lines.push(`<span class="pass">PASS</span>  ${t.name}`);
+      } catch (e) {
+        fails++;
+        lines.push(`<span class="fail">FAIL</span>  ${t.name}\n      ${String(e && e.message || e).replace(/</g, '&lt;')}`);
+      }
+      out.innerHTML = lines.join('\n');
+    }
+  } finally {
+    document.getElementById('frameBox').innerHTML = '';
+    for (const k of KEYS) backup[k] === null ? localStorage.removeItem(k) : localStorage.setItem(k, backup[k]);
+  }
+  const res = fails ? `FAIL: ${fails} af ${tests.length} tests fejlede` : `PASS: alle ${tests.length} tests bestået`;
+  summary.textContent = res;
+  summary.className = fails ? 'fail' : 'pass';
+  document.title = res;
+}
+runAll();
+</script>
+</body>
+</html>
