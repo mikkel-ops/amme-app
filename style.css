@@ -224,6 +224,19 @@ body:not(.tab-feed) #statsBtn { visibility: hidden; }
 .circle#ddropBtn.given { background: var(--green); border-color: var(--green); color: #fff; font-size: 44px; }
 .circle#ddropBtn:active { transform: scale(.97); }
 .ddrop-cal { padding: 4px 16px 0; }
+.ddrop-status.tappable { cursor: pointer; }
+.ddrop-status .chip {
+  font: 500 19px var(--sans);
+  background: #f1f1f3;
+  border-radius: 8px;
+  padding: 5px 10px;
+  margin-left: 4px;
+  font-variant-numeric: tabular-nums;
+}
+.ddrop-status.open .chip { color: #1f6fd1; }
+.ddrop-panel { display: flex; flex-direction: column; align-items: center; padding: 8px 16px 4px; }
+.ddrop-panel[hidden] { display: none; }
+.ddrop-panel .wheels { width: 100%; }
 .cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .cal-head span { font-weight: 600; font-size: 16px; }
 .cal-nav { border: 0; background: none; color: var(--ink); font-size: 28px; line-height: 1; padding: 2px 14px; }

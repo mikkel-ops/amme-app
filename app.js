@@ -86,6 +86,7 @@ function toggle(side) {
 function closePickers() {
   if (startPick) closeStartPicker();
   if (sleepPick) closeSleepPicker();
+  if (ddropPick) closeDdropPicker();
 }
 
 function save() {
@@ -386,7 +387,11 @@ function renderDdrop() {
   const btn = $('ddropBtn');
   btn.classList.toggle('given', !!ts);
   btn.innerHTML = ts ? '✓<small>Givet</small>' : 'D-dråber<small>tryk når givet</small>';
-  $('ddropStatus').textContent = ts ? `Givet i dag kl. ${fmtTime(ts)}` : 'Ikke givet i dag endnu';
+  if (!ts && ddropPick) closeDdropPicker();
+  $('ddropStatus').classList.toggle('tappable', !!ts);
+  $('ddropStatus').innerHTML = ts
+    ? `Givet i dag kl. <span class="chip">${fmtTime(ts)}</span>`
+    : 'Ikke givet i dag endnu';
   $('ddropCal').innerHTML = calendarHTML(calMonth);
 }
 
@@ -432,6 +437,38 @@ $('ddropBtn').addEventListener('click', () => {
   toggleDdrop(day, now);
   renderDdrop();
 });
+// Ret tidspunktet for i dag: tryk på "Givet i dag kl. HH:MM" -> drejehjul (time, minut)
+let ddropPick = null;
+function openDdropPicker() {
+  const ts = state.ddrops[isoDay(Date.now())];
+  if (!ts) return;
+  if (ddropPick) return closeDdropPicker(true);
+  const d = new Date(ts), box = $('ddropWheels');
+  $('ddropPanel').hidden = false;
+  box.innerHTML = '';
+  // Feltet følger hjulene, mens man drejer
+  const sync = () => { if (ddropPick) $('ddropStatus').querySelector('.chip').textContent = `${pad(ddropPick.h.index)}:${pad(ddropPick.m.index)}`; };
+  ddropPick = {
+    h: new Wheel(box, range(24).map(pad), d.getHours(), 'num big', sync),
+    m: new Wheel(box, range(60).map(pad), d.getMinutes(), 'num big', sync),
+  };
+  $('ddropStatus').classList.add('open');
+}
+function closeDdropPicker(apply) {
+  const day = isoDay(Date.now());
+  if (ddropPick && apply && state.ddrops[day]) {
+    const t = new Date(); t.setHours(ddropPick.h.index, ddropPick.m.index, 0, 0);
+    state.ddrops[day] = Math.min(t.getTime(), Date.now()); // ikke i fremtiden
+    persist();
+  }
+  ddropPick = null;
+  $('ddropPanel').hidden = true;
+  $('ddropStatus').classList.remove('open');
+  renderDdrop();
+}
+$('ddropStatus').addEventListener('click', openDdropPicker);
+$('ddropDone').addEventListener('click', () => closeDdropPicker(true));
+
 // Delegering, da kalenderen tegnes om ved hver ændring
 $('ddropCal').addEventListener('click', (e) => {
   const nav = e.target.closest('.cal-nav');
