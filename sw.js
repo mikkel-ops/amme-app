@@ -1,5 +1,5 @@
 // Bump VERSION ved hver ændring, så telefonerne henter den nye udgave.
-const VERSION = 'amme-v10';
+const VERSION = 'amme-v11';
 const FILES = ['./', 'index.html', 'style.css', 'app.js', 'manifest.webmanifest', 'icon-180.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {
