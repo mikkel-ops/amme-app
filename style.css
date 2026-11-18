@@ -7,6 +7,10 @@
   --bg: #ffffff;
   --cream: #fdf9f4;
   --danger: #d9673a;
+  --green: #3f9a5b;
+  --green-soft: #e3f3e7;
+  --red: #c9552a;
+  --red-soft: #fbe5dc;
   --diaper: #efe6d2;
   --sleep: #bfe0ee;
   --head: var(--yellow);
@@ -197,6 +201,49 @@ body:not(.tab-feed) #statsBtn { visibility: hidden; }
 .row span:first-child { font-family: var(--serif); font-size: 21px; }
 .actions { display: flex; gap: 12px; padding: 16px 20px; }
 .actions .pill { flex: 1; min-width: 0; }
+
+/* ---------- D-dråber ---------- */
+.ddrop {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 16px 20px;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  font: 17px var(--sans);
+  color: var(--ink);
+  text-align: left;
+  transition: background .2s;
+}
+.ddrop:active { filter: brightness(.96); }
+.ddrop-title { font-family: var(--serif); font-size: 21px; }
+.ddrop-status { font-weight: 600; }
+.ddrop.given { background: var(--green-soft); }
+.ddrop.given .ddrop-status { color: var(--green); }
+.ddrop.missing { background: var(--red-soft); }
+.ddrop.missing .ddrop-status { color: var(--red); }
+
+.cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.cal-head span { font-weight: 600; font-size: 16px; }
+.cal-nav { border: 0; background: none; color: var(--ink); font-size: 28px; line-height: 1; padding: 2px 14px; }
+.cal-nav:disabled { opacity: .25; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+.cal .wd { text-align: center; font-size: 12px; color: var(--muted); padding-bottom: 2px; }
+.cal button {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 50%;
+  font: 600 15px var(--sans);
+  color: var(--ink);
+  background: #f3f3f5;
+  padding: 0;
+}
+.cal button.g { background: var(--green); color: #fff; }
+.cal button.r { background: var(--red-soft); color: var(--red); }
+.cal button.n { background: #f3f3f5; color: var(--muted); }
+.cal button.f { background: none; color: #c8ccd4; }
+.cal button.today { box-shadow: 0 0 0 2px var(--ink); }
 
 .since {
   text-align: center;
