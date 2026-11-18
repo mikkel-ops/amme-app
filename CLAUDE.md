@@ -68,6 +68,9 @@ GitHub Pages fra `main` (rodmappen). Den deployer automatisk ved push.
 3. Tjek at Pages-builden er færdig: `gh api repos/mikkel-ops/amme-app/pages/builds/latest --jq .status` skal give `built`.
 
 ## Test lokalt
+- **Testsuite:** `bash tests/run.sh` starter en server, kører `tests/index.html` i headless Chrome og giver exit-kode 0, når alle tests er bestået. Kør den før hver commit. Siden kan også åbnes i en browser på `http://localhost:8765/tests/`.
+- `tests/index.html` indlæser appen i en 390px iframe og har en `boot(seed)`-hjælper, der starter appen med givne data. `setNow(t)` styrer `Date.now` i appen, `submit(dlgId)` trykker Gem i en dialog, og `importJSON(obj)` lægger en backup i importen. Tilføj nye tests med `test('navn', async () => { ... })`, når du ændrer adfærd.
+- Testsiden ligger også på Pages, men den kører kun på localhost og lægger eksisterende `localStorage` tilbage bagefter, så rigtige data ikke røres.
 - Start en server med `python3 -m http.server 8765` i repoets rod.
 - Headless Chrome har en minimumsbredde på cirka 500px. Indlejr derfor appen i en `<iframe>` på 390px for at få iPhone-bredde. Seed `localStorage` fra en midlertidig testside på samme origin (f.eks. `zz.html`), og slet den bagefter.
 - Overskriv `alert`/`confirm` i iframen (`f.contentWindow.alert = ...`), ellers hænger headless Chrome. Kør Chrome med en tidsgrænse.
