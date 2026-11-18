@@ -13,6 +13,7 @@
   --red-soft: #fbe5dc;
   --diaper: #efe6d2;
   --sleep: #bfe0ee;
+  --ddrop: #cfe8d4;
   --head: var(--yellow);
   --tabs-h: 58px;
   --serif: ui-serif, "New York", Georgia, "Times New Roman", serif;
@@ -79,6 +80,7 @@ main { padding-bottom: calc(env(safe-area-inset-bottom) + var(--tabs-h) + 24px);
 main[hidden] { display: none; }
 body.tab-diaper { --head: var(--diaper); }
 body.tab-sleep { --head: var(--sleep); }
+body.tab-ddrop { --head: var(--ddrop); }
 body:not(.tab-feed) #statsBtn { visibility: hidden; }
 
 .timers {
@@ -203,27 +205,25 @@ body:not(.tab-feed) #statsBtn { visibility: hidden; }
 .actions .pill { flex: 1; min-width: 0; }
 
 /* ---------- D-dråber ---------- */
-.ddrop {
+.ddrop-top { display: flex; justify-content: center; padding: 28px 16px 4px; }
+.circle#ddropBtn {
+  width: 160px;
+  height: 160px;
   display: flex;
-  justify-content: space-between;
+  flex-direction: column;
   align-items: center;
-  width: 100%;
-  padding: 16px 20px;
-  border: 0;
-  border-bottom: 1px solid var(--line);
-  font: 17px var(--sans);
-  color: var(--ink);
-  text-align: left;
-  transition: background .2s;
+  justify-content: center;
+  gap: 2px;
+  background: var(--red-soft);
+  border-color: var(--red);
+  color: var(--red);
+  font-size: 26px;
+  transition: background .2s, color .2s;
 }
-.ddrop:active { filter: brightness(.96); }
-.ddrop-title { font-family: var(--serif); font-size: 21px; }
-.ddrop-status { font-weight: 600; }
-.ddrop.given { background: var(--green-soft); }
-.ddrop.given .ddrop-status { color: var(--green); }
-.ddrop.missing { background: var(--red-soft); }
-.ddrop.missing .ddrop-status { color: var(--red); }
-
+.circle#ddropBtn small { font-size: 15px; font-weight: 500; }
+.circle#ddropBtn.given { background: var(--green); border-color: var(--green); color: #fff; font-size: 44px; }
+.circle#ddropBtn:active { transform: scale(.97); }
+.ddrop-cal { padding: 4px 16px 0; }
 .cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
 .cal-head span { font-weight: 600; font-size: 16px; }
 .cal-nav { border: 0; background: none; color: var(--ink); font-size: 28px; line-height: 1; padding: 2px 14px; }
